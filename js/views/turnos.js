@@ -6,6 +6,7 @@ window.ViewTurnos = {
     alumnosData: null,
     filtroActividad: '',
     filtroTurno: '',
+    filtroAlumnoTurno: '',
 
     async render() {
         const container = document.getElementById('turnos-container');
@@ -74,6 +75,16 @@ window.ViewTurnos = {
             <option value="noche" ${this.filtroTurno === 'noche' ? 'selected' : ''}>Noche (desde 18:00)</option>
         `;
 
+        let alumnosOptionsHtml = '<option value="">Todos los Alumnos</option>';
+        if (this.alumnosData && this.alumnosData.id) {
+            this.alumnosData.id.forEach((aid, i) => {
+                if (this.alumnosData.estado[i] !== 'Inactivo') {
+                    const selected = (this.filtroAlumnoTurno == aid) ? 'selected' : '';
+                    alumnosOptionsHtml += `<option value="${aid}" ${selected}>${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                }
+            });
+        }
+
         return `
             <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px;">
                 <div class="filters" style="display:flex; gap: 10px;">
@@ -82,6 +93,9 @@ window.ViewTurnos = {
                     </select>
                     <select id="filtro-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${turnosHtml}
+                    </select>
+                    <select id="filtro-alumno-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                        ${alumnosOptionsHtml}
                     </select>
                 </div>
             </div>
@@ -101,6 +115,7 @@ window.ViewTurnos = {
     aplicarFiltros() {
         this.filtroActividad = document.getElementById('filtro-actividad').value;
         this.filtroTurno = document.getElementById('filtro-turno').value;
+        this.filtroAlumnoTurno = document.getElementById('filtro-alumno-turno').value;
         this.renderTabContent();
     },
 
@@ -121,51 +136,80 @@ window.ViewTurnos = {
     renderClasesDia(dia, horarios, actividades) {
         if(!horarios || !horarios.dia_semana) return '';
         
-        let clasesHtml = '';
+        let clasesDelDia = [];
         for(let i=0; i < horarios.id.length; i++) {
             if (horarios.dia_semana[i] === dia) {
-                const actId = horarios.actividad_id[i];
-                const horaInicio = horarios.hora_inicio[i];
-                
-                if (this.filtroActividad && actId.toString() !== this.filtroActividad) continue;
+                clasesDelDia.push({
+                    id: horarios.id[i],
+                    actId: horarios.actividad_id[i],
+                    horaInicio: horarios.hora_inicio[i],
+                    horaFin: horarios.hora_fin[i]
+                });
+            }
+        }
+        
+        clasesDelDia.sort((a, b) => {
+            const timeA = a.horaInicio ? a.horaInicio.replace(':', '') : '0000';
+            const timeB = b.horaInicio ? b.horaInicio.replace(':', '') : '0000';
+            return parseInt(timeA) - parseInt(timeB);
+        });
 
-                if (this.filtroTurno && horaInicio) {
-                    const hora = parseInt(horaInicio.split(':')[0]);
-                    if (this.filtroTurno === 'mañana' && hora >= 12) continue;
-                    if (this.filtroTurno === 'tarde' && (hora < 12 || hora >= 18)) continue;
-                    if (this.filtroTurno === 'noche' && hora < 18) continue;
-                }
+        let clasesHtml = '';
+        for(const c of clasesDelDia) {
+            const actId = c.actId;
+            const horaInicio = c.horaInicio;
+            
+            if (this.filtroActividad && actId.toString() !== this.filtroActividad) continue;
 
-                let actName = "Desc.";
-                let color = "var(--primary)";
-                let cupoMax = 0;
-                
-                if (actividades && actividades.id) {
-                    const actIndex = actividades.id.indexOf(actId);
-                    if (actIndex !== -1) {
-                        actName = actividades.nombre_actividad[actIndex];
-                        color = actividades.color_ui[actIndex] || color;
-                        cupoMax = actividades.cupo_maximo[actIndex] || 0;
+            if (this.filtroTurno && horaInicio) {
+                const hora = parseInt(horaInicio.split(':')[0]);
+                if (this.filtroTurno === 'mañana' && hora >= 12) continue;
+                if (this.filtroTurno === 'tarde' && (hora < 12 || hora >= 18)) continue;
+                if (this.filtroTurno === 'noche' && hora < 18) continue;
+            }
+
+            if (this.filtroAlumnoTurno) {
+                let isEnrolled = false;
+                if (this.reservasData && this.reservasData.id) {
+                    for (let j=0; j < this.reservasData.id.length; j++) {
+                        if (this.reservasData.horario_base_id[j] === c.id && this.reservasData.alumno_id[j].toString() === this.filtroAlumnoTurno) {
+                            isEnrolled = true;
+                            break;
+                        }
                     }
                 }
-
-                const info = this.getAnotadosInfo(horarios.id[i]);
-                const cupoBadge = cupoMax > 0 ? `${info.regulares}/${cupoMax}` : `${info.regulares}`;
-                let extraBadges = '';
-                if (info.recuperaciones > 0) extraBadges += `<span style="color:var(--primary); font-size:11px; margin-right:5px; font-weight:600;">${info.recuperaciones} R</span>`;
-                if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
-
-                clasesHtml += `
-                    <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${horarios.id[i]}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
-                        <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${horarios.hora_inicio[i]} - ${horarios.hora_fin[i]}</div>
-                        <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
-                            <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
-                        </div>
-                    </div>
-                `;
+                if (!isEnrolled) continue;
             }
+
+            let actName = "Desc.";
+            let color = "var(--primary)";
+            let cupoMax = 0;
+            
+            if (actividades && actividades.id) {
+                const actIndex = actividades.id.indexOf(actId);
+                if (actIndex !== -1) {
+                    actName = actividades.nombre_actividad[actIndex];
+                    color = actividades.color_ui[actIndex] || color;
+                    cupoMax = actividades.cupo_maximo[actIndex] || 0;
+                }
+            }
+
+            const info = this.getAnotadosInfo(c.id);
+            const cupoBadge = cupoMax > 0 ? `${info.regulares}/${cupoMax}` : `${info.regulares}`;
+            let extraBadges = '';
+            if (info.recuperaciones > 0) extraBadges += `<span style="color:var(--primary); font-size:11px; margin-right:5px; font-weight:600;">${info.recuperaciones} R</span>`;
+            if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
+
+            clasesHtml += `
+                <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
+                    <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${c.horaInicio}</div>
+                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
+                        <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
+                    </div>
+                </div>
+            `;
         }
         return clasesHtml || '<div style="font-size:12px; text-align:center; color: var(--text-muted); padding: 10px;">Sin clases</div>';
     },
@@ -276,6 +320,7 @@ window.ViewTurnos = {
                 } else {
                     await GristData.addRecord('Actividades', data);
                 }
+                await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
                 window.Modal.close();
                 this.render();
             } catch (e) {
@@ -404,7 +449,8 @@ window.ViewTurnos = {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
                 btn.disabled = true;
                 await GristData.addRecords('Horarios_Base', dataArray);
-                this.render(); // Refreshes the underlying view
+                await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
+                await this.render(); // Refreshes the underlying view
                 this.openHorariosModal(index); // Re-opens this modal to see updated data
             } catch (e) {
                 alert('Error al agregar los horarios');
@@ -418,7 +464,8 @@ window.ViewTurnos = {
         if(!confirm("¿Seguro que deseas eliminar este horario?")) return;
         try {
             await GristData.deleteRecord('Horarios_Base', horarioId);
-            this.render(); // Refresh main view
+            await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
+            await this.render(); // Refresh main view
             this.openHorariosModal(actIndex); // Refresh modal
         } catch (e) {
             alert("Error al eliminar horario.");
@@ -570,6 +617,7 @@ window.ViewTurnos = {
                     tipo_reserva: tipoReserva
                 });
                 
+                await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
                 await this.render(); 
                 this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
             } catch (error) {
@@ -588,6 +636,7 @@ window.ViewTurnos = {
         if(!confirm("¿Dar de baja a este alumno de la clase?")) return;
         try {
             await GristData.deleteRecord('Turnos_Alumnos', reservaId);
+            await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
             await this.render();
             this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
         } catch(e) {

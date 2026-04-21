@@ -48,9 +48,19 @@ window.ViewAlumnos = {
                 rows = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--text-muted);">No hay alumnos registrados</td></tr>';
             }
 
+            const searchHtml = `
+                <div style="margin-bottom: 15px; display:flex; justify-content:flex-end;">
+                    <div style="position:relative; width: 100%; max-width: 300px;">
+                        <i class="ph ph-magnifying-glass" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                        <input type="text" id="filtro-alumnos" class="form-control" placeholder="Buscar alumno..." oninput="window.ViewAlumnos.filtrarTabla(this.value)" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 35px;">
+                    </div>
+                </div>
+            `;
+
             const html = `
+                ${searchHtml}
                 <div class="card" style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <table id="tabla-alumnos" style="width: 100%; border-collapse: collapse; text-align: left;">
                         <thead>
                             <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 13px; text-transform: uppercase;">
                                 <th style="padding: 12px;">Alumno</th>
@@ -72,6 +82,16 @@ window.ViewAlumnos = {
             console.error(error);
             container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando alumnos.</p>';
         }
+    },
+
+    filtrarTabla(val) {
+        const term = val.toLowerCase();
+        const rows = document.querySelectorAll('#tabla-alumnos tbody tr');
+        rows.forEach(row => {
+            const text = row.innerText.toLowerCase();
+            if (text.includes(term)) row.style.display = '';
+            else row.style.display = 'none';
+        });
     },
 
     async openEditModal(index) {
@@ -161,6 +181,7 @@ window.ViewAlumnos = {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
                 btn.disabled = true;
                 await GristData.updateRecord('Alumnos', id, data);
+                await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
                 window.Modal.close();
                 this.render(); // Refrescar lista
             } catch (e) {
