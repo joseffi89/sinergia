@@ -8,6 +8,7 @@ window.ViewTurnos = {
     filtroTurno: '',
     filtroAlumnoTurno: '',
     filtroHora: '',
+    filtroUbicacion: '',
 
     async render() {
         const container = document.getElementById('turnos-container');
@@ -17,12 +18,13 @@ window.ViewTurnos = {
 
         try {
             // Cargar todas las tablas EN PARALELO para minimizar el tiempo de espera
-            const [actividades, horarios, reservas, alumnos, planes] = await Promise.all([
+            const [actividades, horarios, reservas, alumnos, planes, pagos] = await Promise.all([
                 GristData.getTable('Actividades').catch(() => ({ id: [] })),
                 GristData.getTable('Horarios_Base').catch(() => ({ id: [] })),
                 GristData.getTable('Turnos_Alumnos').catch(() => ({ id: [] })),
                 GristData.getTable('Alumnos').catch(() => ({ id: [] })),
-                GristData.getTable('Planes').catch(() => ({ id: [] }))
+                GristData.getTable('Planes').catch(() => ({ id: [] })),
+                GristData.getTable('Pagos').catch(() => ({ id: [] }))
             ]);
 
             this.actividadesData = actividades;
@@ -30,6 +32,7 @@ window.ViewTurnos = {
             this.reservasData = reservas;
             this.alumnosData = alumnos;
             this.planesData = planes;
+            this.pagosData = pagos;
 
             if (!this.actividadesData || !this.actividadesData.id) {
                 container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
@@ -130,6 +133,19 @@ window.ViewTurnos = {
             });
         }
 
+        // Filtro de Ubicaciones (valores únicos desde los horarios)
+        let ubicacionesSet = new Set();
+        if (horarios && horarios.id) {
+            horarios.id.forEach((_, i) => {
+                const ub = horarios.ubicacion ? horarios.ubicacion[i] : '';
+                if (ub) ubicacionesSet.add(ub);
+            });
+        }
+        let ubicacionesHtml = `<option value="" ${this.filtroUbicacion === '' ? 'selected' : ''}>Todas las Ubicaciones</option>`;
+        [...ubicacionesSet].sort().forEach(ub => {
+            ubicacionesHtml += `<option value="${ub}" ${this.filtroUbicacion === ub ? 'selected' : ''}>${ub}</option>`;
+        });
+
         const turnosHtml = `
             <option value="" ${this.filtroTurno === '' ? 'selected' : ''}>Todos los turnos</option>
             <option value="mañana" ${this.filtroTurno === 'mañana' ? 'selected' : ''}>Mañana (hasta 12:00)</option>
@@ -138,26 +154,29 @@ window.ViewTurnos = {
         `;
 
         const searchInputHtml = `
-            <div style="display:flex; gap:10px; width: 100%; max-width: 450px;">
-                <div style="position:relative; flex:1;">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <div style="position:relative; min-width:220px;">
                     <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                    <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+                    <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px; width:100%;">
                 </div>
-                <div style="position:relative; width:130px;">
+                <div style="position:relative; width:120px;">
                     <i class="ph ph-clock" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                    <input type="time" id="filtro-hora-turno" class="form-control" value="${this.filtroHora || ''}" onchange="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+                    <input type="time" id="filtro-hora-turno" class="form-control" value="${this.filtroHora || ''}" onchange="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px;">
                 </div>
             </div>
         `;
 
         return `
-            <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px;">
-                <div class="filters" style="display:flex; gap: 10px;">
+            <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
+                <div class="filters" style="display:flex; gap: 10px; flex-wrap:wrap; align-items:center;">
                     <select id="filtro-actividad" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${optionsHtml}
                     </select>
                     <select id="filtro-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${turnosHtml}
+                    </select>
+                    <select id="filtro-ubicacion" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                        ${ubicacionesHtml}
                     </select>
                     ${searchInputHtml}
                 </div>
@@ -172,6 +191,8 @@ window.ViewTurnos = {
         this.filtroAlumnoTurno = document.getElementById('filtro-alumno-turno').value;
         const horaInput = document.getElementById('filtro-hora-turno');
         this.filtroHora = horaInput ? horaInput.value : '';
+        const ubicInput = document.getElementById('filtro-ubicacion');
+        this.filtroUbicacion = ubicInput ? ubicInput.value : '';
         this.renderTabContent();
     },
 
@@ -200,7 +221,8 @@ window.ViewTurnos = {
                     actId: horarios.actividad_id[i],
                     horaInicio: horarios.hora_inicio[i],
                     horaFin: horarios.hora_fin[i],
-                    obs: horarios.observaciones ? horarios.observaciones[i] : ''
+                    obs: horarios.observaciones ? horarios.observaciones[i] : '',
+                    ubicacion: horarios.ubicacion ? horarios.ubicacion[i] : ''
                 });
             }
         }
@@ -225,9 +247,10 @@ window.ViewTurnos = {
                 if (this.filtroTurno === 'noche' && hora < 18) continue;
             }
 
-            if (this.filtroHora && horaInicio !== this.filtroHora) {
-                continue;
-            }
+            if (this.filtroHora && horaInicio !== this.filtroHora) continue;
+
+            // Filtro por ubicacion
+            if (this.filtroUbicacion && (c.ubicacion || '') !== this.filtroUbicacion) continue;
 
             if (this.filtroAlumnoTurno) {
                 let isEnrolled = false;
@@ -239,9 +262,11 @@ window.ViewTurnos = {
                             if (this.alumnosData && this.alumnosData.id) {
                                 const idx = this.alumnosData.id.indexOf(alumnoId);
                                 if (idx !== -1) {
-                                    const nom = (this.alumnosData.nombre[idx] || '').toLowerCase();
-                                    const ape = (this.alumnosData.apellido[idx] || '').toLowerCase();
-                                    if (nom.includes(searchTerm) || ape.includes(searchTerm)) {
+                                    const fullName = (this.alumnosData.Apellido_y_Nombre
+                                        ? this.alumnosData.Apellido_y_Nombre[idx]
+                                        : `${this.alumnosData.apellido[idx]} ${this.alumnosData.nombre[idx]}`
+                                    ) || '';
+                                    if (fullName.toLowerCase().includes(searchTerm)) {
                                         isEnrolled = true;
                                         break;
                                     }
@@ -276,7 +301,7 @@ window.ViewTurnos = {
                 <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
                     <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${c.horaInicio}</div>
                     <div style="font-weight: 500; font-size: 14px; margin-bottom: 2px;">${actName}</div>
-                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">${c.obs || ''}</div>
+                    ${c.ubicacion ? `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
                         <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
@@ -660,9 +685,12 @@ window.ViewTurnos = {
                     const colorPago = this.getAlumnoPagoStatus(alumnoId);
                     const circleHtml = `<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${colorPago}; margin-right:8px; flex-shrink:0;" title="Estado de Pago Actual"></span>`;
 
-                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge: badge, circle: circleHtml });
+                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge, circle: circleHtml });
                 }
             }
+
+            // Ordenar alfabeticamente
+            enrolled.sort((a, b) => a.name.localeCompare(b.name));
 
             if (enrolled.length > 0) {
                 enrolledHtml = `
@@ -718,7 +746,25 @@ window.ViewTurnos = {
         let todosHtml = '<option value="">Seleccionar Alumno...</option>' +
             todosOpts.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
 
+        // Datos del horario (ubicacion y observaciones)
+        let horarioUbicacion = '';
+        let horarioObs = '';
+        if (this.horariosData && this.horariosData.id) {
+            const hIdx = this.horariosData.id.indexOf(horarioBaseId);
+            if (hIdx !== -1) {
+                horarioUbicacion = this.horariosData.ubicacion ? (this.horariosData.ubicacion[hIdx] || '') : '';
+                horarioObs = this.horariosData.observaciones ? (this.horariosData.observaciones[hIdx] || '') : '';
+            }
+        }
+        const horarioInfoHtml = (horarioUbicacion || horarioObs) ? `
+            <div style="background: var(--bg-dark); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 18px; font-size: 13px; border-left: 3px solid var(--primary);">
+                ${horarioUbicacion ? `<div style="color: var(--text-muted);"><i class="ph ph-map-pin"></i> <strong>Ubicación:</strong> ${horarioUbicacion}</div>` : ''}
+                ${horarioObs ? `<div style="color: var(--text-muted); margin-top:4px;"><i class="ph ph-note"></i> <strong>Obs:</strong> ${horarioObs}</div>` : ''}
+            </div>
+        ` : '';
+
         const formHtml = `
+            ${horarioInfoHtml}
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid var(--border);">Anotados</h4>
                 ${enrolledHtml}
