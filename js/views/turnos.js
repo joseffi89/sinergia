@@ -7,21 +7,24 @@ window.ViewTurnos = {
     filtroActividad: '',
     filtroTurno: '',
     filtroAlumnoTurno: '',
+    filtroHora: '',
 
     async render() {
         const container = document.getElementById('turnos-container');
-        if (!this.actividadesData) {
+        if (this.actividadesData) {
+            this.renderTabContent(); // Render immediately with cached data
+        } else {
             container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
         }
 
         try {
-            // Obtener datos
+            // Update data in background
             this.actividadesData = await GristData.getTable('Actividades');
             this.horariosData = await GristData.getTable('Horarios_Base');
-            try { this.reservasData = await GristData.getTable('Turnos_Alumnos'); } catch(e) { this.reservasData = { id: [] }; }
-            try { this.alumnosData = await GristData.getTable('Alumnos'); } catch(e) { this.alumnosData = { id: [] }; }
-            try { this.planesData = await GristData.getTable('Planes'); } catch(e) { this.planesData = { id: [] }; }
-            
+            try { this.reservasData = await GristData.getTable('Turnos_Alumnos'); } catch (e) { this.reservasData = { id: [] }; }
+            try { this.alumnosData = await GristData.getTable('Alumnos'); } catch (e) { this.alumnosData = { id: [] }; }
+            try { this.planesData = await GristData.getTable('Planes'); } catch (e) { this.planesData = { id: [] }; }
+
             if (!this.actividadesData || !this.horariosData) {
                 container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
                 return;
@@ -89,12 +92,18 @@ window.ViewTurnos = {
     getCalendarioHtml() {
         const actividades = this.actividadesData;
         const horarios = this.horariosData;
-        
+
         let optionsHtml = '<option value="">Todas las Actividades</option>';
         if (actividades && actividades.id) {
-            actividades.id.forEach((id, index) => {
-                const selected = (this.filtroActividad == id) ? 'selected' : '';
-                optionsHtml += `<option value="${id}" ${selected}>${actividades.nombre_actividad[index]}</option>`;
+            // Sort activities alphabetically
+            const sortedActividades = actividades.id.map((id, index) => ({
+                id,
+                nombre: actividades.nombre_actividad[index]
+            })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            sortedActividades.forEach(act => {
+                const selected = (this.filtroActividad == act.id) ? 'selected' : '';
+                optionsHtml += `<option value="${act.id}" ${selected}>${act.nombre}</option>`;
             });
         }
 
@@ -106,9 +115,15 @@ window.ViewTurnos = {
         `;
 
         const searchInputHtml = `
-            <div style="position:relative; width: 100%; max-width: 250px;">
-                <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+            <div style="display:flex; gap:10px; width: 100%; max-width: 450px;">
+                <div style="position:relative; flex:1;">
+                    <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                    <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+                </div>
+                <div style="position:relative; width:130px;">
+                    <i class="ph ph-clock" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                    <input type="time" id="filtro-hora-turno" class="form-control" value="${this.filtroHora || ''}" onchange="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+                </div>
             </div>
         `;
 
@@ -132,6 +147,8 @@ window.ViewTurnos = {
         this.filtroActividad = document.getElementById('filtro-actividad').value;
         this.filtroTurno = document.getElementById('filtro-turno').value;
         this.filtroAlumnoTurno = document.getElementById('filtro-alumno-turno').value;
+        const horaInput = document.getElementById('filtro-hora-turno');
+        this.filtroHora = horaInput ? horaInput.value : '';
         this.renderTabContent();
     },
 
@@ -150,20 +167,21 @@ window.ViewTurnos = {
     },
 
     renderClasesDia(dia, horarios, actividades) {
-        if(!horarios || !horarios.dia_semana) return '';
-        
+        if (!horarios || !horarios.dia_semana) return '';
+
         let clasesDelDia = [];
-        for(let i=0; i < horarios.id.length; i++) {
+        for (let i = 0; i < horarios.id.length; i++) {
             if (horarios.dia_semana[i] === dia) {
                 clasesDelDia.push({
                     id: horarios.id[i],
                     actId: horarios.actividad_id[i],
                     horaInicio: horarios.hora_inicio[i],
-                    horaFin: horarios.hora_fin[i]
+                    horaFin: horarios.hora_fin[i],
+                    obs: horarios.observaciones ? horarios.observaciones[i] : ''
                 });
             }
         }
-        
+
         clasesDelDia.sort((a, b) => {
             const timeA = a.horaInicio ? a.horaInicio.replace(':', '') : '0000';
             const timeB = b.horaInicio ? b.horaInicio.replace(':', '') : '0000';
@@ -171,10 +189,10 @@ window.ViewTurnos = {
         });
 
         let clasesHtml = '';
-        for(const c of clasesDelDia) {
+        for (const c of clasesDelDia) {
             const actId = c.actId;
             const horaInicio = c.horaInicio;
-            
+
             if (this.filtroActividad && actId.toString() !== this.filtroActividad) continue;
 
             if (this.filtroTurno && horaInicio) {
@@ -184,11 +202,15 @@ window.ViewTurnos = {
                 if (this.filtroTurno === 'noche' && hora < 18) continue;
             }
 
+            if (this.filtroHora && horaInicio !== this.filtroHora) {
+                continue;
+            }
+
             if (this.filtroAlumnoTurno) {
                 let isEnrolled = false;
                 const searchTerm = this.filtroAlumnoTurno.toLowerCase();
                 if (this.reservasData && this.reservasData.id) {
-                    for (let j=0; j < this.reservasData.id.length; j++) {
+                    for (let j = 0; j < this.reservasData.id.length; j++) {
                         if (this.reservasData.horario_base_id[j] === c.id) {
                             const alumnoId = this.reservasData.alumno_id[j];
                             if (this.alumnosData && this.alumnosData.id) {
@@ -211,7 +233,7 @@ window.ViewTurnos = {
             let actName = "Desc.";
             let color = "var(--primary)";
             let cupoMax = 0;
-            
+
             if (actividades && actividades.id) {
                 const actIndex = actividades.id.indexOf(actId);
                 if (actIndex !== -1) {
@@ -230,7 +252,8 @@ window.ViewTurnos = {
             clasesHtml += `
                 <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
                     <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${c.horaInicio}</div>
-                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
+                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 2px;">${actName}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">${c.obs || ''}</div>
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
                         <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
@@ -245,11 +268,15 @@ window.ViewTurnos = {
         const actividades = this.actividadesData;
         let rows = '';
         if (actividades && actividades.id && actividades.id.length > 0) {
-            for(let i=0; i < actividades.id.length; i++) {
+            // Sort activities alphabetically
+            const sortedIndices = actividades.id.map((_, i) => i)
+                .sort((a, b) => actividades.nombre_actividad[a].localeCompare(actividades.nombre_actividad[b]));
+
+            for (const i of sortedIndices) {
                 const nombre = actividades.nombre_actividad ? actividades.nombre_actividad[i] : 'Sin nombre';
                 const cupo = actividades.cupo_maximo ? actividades.cupo_maximo[i] : 0;
                 const color = actividades.color_ui ? actividades.color_ui[i] : '#000';
-                
+
                 rows += `
                     <tr style="border-bottom: 1px solid var(--border);">
                         <td style="padding: 12px; font-weight: 500;">
@@ -295,7 +322,7 @@ window.ViewTurnos = {
     },
 
     openActividadModal(index) {
-        if(!this.actividadesData || !this.actividadesData.id) return;
+        if (!this.actividadesData || !this.actividadesData.id) return;
         const id = this.actividadesData.id[index];
         const data = {
             nombre_actividad: this.actividadesData.nombre_actividad ? this.actividadesData.nombre_actividad[index] : '',
@@ -359,31 +386,32 @@ window.ViewTurnos = {
     },
 
     async openHorariosModal(index) {
-        if(!this.actividadesData || !this.actividadesData.id) return;
+        if (!this.actividadesData || !this.actividadesData.id) return;
         const actId = this.actividadesData.id[index];
         const actName = this.actividadesData.nombre_actividad[index];
-        
+
         // Ensure we have fresh data for the modal
         this.horariosData = await GristData.getTable('Horarios_Base');
-        
+
         // Find existing schedules
         let existingSchedules = [];
         if (this.horariosData && this.horariosData.id) {
-            for(let i=0; i < this.horariosData.id.length; i++) {
+            for (let i = 0; i < this.horariosData.id.length; i++) {
                 if (this.horariosData.actividad_id[i] === actId) {
                     existingSchedules.push({
                         id: this.horariosData.id[i],
                         dia: this.horariosData.dia_semana[i],
                         inicio: this.horariosData.hora_inicio[i],
-                        fin: this.horariosData.hora_fin[i]
+                        fin: this.horariosData.hora_fin[i],
+                        obs: this.horariosData.observaciones ? this.horariosData.observaciones[i] : ''
                     });
                 }
             }
         }
 
         // Sort schedules by day
-        const dayOrder = { 'Lunes':1, 'Martes':2, 'Miercoles':3, 'Jueves':4, 'Viernes':5, 'Sabado':6, 'Domingo':7 };
-        existingSchedules.sort((a,b) => (dayOrder[a.dia]||9) - (dayOrder[b.dia]||9));
+        const dayOrder = { 'Lunes': 1, 'Martes': 2, 'Miercoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sabado': 6, 'Domingo': 7 };
+        existingSchedules.sort((a, b) => (dayOrder[a.dia] || 9) - (dayOrder[b.dia] || 9));
 
         let tableHtml = '';
         if (existingSchedules.length > 0) {
@@ -400,8 +428,12 @@ window.ViewTurnos = {
                         ${existingSchedules.map(sch => `
                             <tr style="border-bottom:1px solid var(--border);">
                                 <td style="padding:8px; font-weight:500;">${sch.dia}</td>
-                                <td style="padding:8px;">${sch.inicio} - ${sch.fin}</td>
-                                <td style="padding:8px; text-align:right;">
+                                <td style="padding:8px;">
+                                    ${sch.inicio} - ${sch.fin}
+                                    <div style="font-size:11px; color:var(--text-muted);">${sch.obs || ''}</div>
+                                </td>
+                                <td style="padding:8px; text-align:right; white-space: nowrap;">
+                                    <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--primary); margin-right:4px;" title="Editar Observación" onclick="window.ViewTurnos.editObservacion(${sch.id}, '${sch.obs}', ${index})"><i class="ph ph-pencil-simple"></i></button>
                                     <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.deleteHorario(${sch.id}, ${index})"><i class="ph ph-trash"></i></button>
                                 </td>
                             </tr>
@@ -422,7 +454,7 @@ window.ViewTurnos = {
                 <div class="form-group">
                     <label>Días de la Semana</label>
                     <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:5px;">
-                        ${['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'].map(dia => `
+                        ${['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'].map(dia => `
                             <label style="display:flex; align-items:center; gap:5px; background:var(--bg-dark); padding:5px 10px; border-radius:4px; border:1px solid var(--border); cursor:pointer; font-size:13px;">
                                 <input type="checkbox" name="horario_dias" value="${dia}"> ${dia}
                             </label>
@@ -439,6 +471,10 @@ window.ViewTurnos = {
                         <input type="time" id="bulk-fin" class="form-control">
                     </div>
                 </div>
+                <div class="form-group">
+                    <label>Observaciones (Ej. Profesor, Sala, etc.)</label>
+                    <input type="text" id="bulk-obs" class="form-control" placeholder="Ej. Profe Juan">
+                </div>
             </div>
         `;
 
@@ -454,6 +490,7 @@ window.ViewTurnos = {
             const diasSeleccionados = Array.from(checkboxes).map(cb => cb.value);
             const hora_inicio = document.getElementById('bulk-inicio').value;
             const hora_fin = document.getElementById('bulk-fin').value;
+            const observaciones = document.getElementById('bulk-obs').value;
 
             if (diasSeleccionados.length === 0) {
                 alert("Debes seleccionar al menos un día.");
@@ -468,7 +505,8 @@ window.ViewTurnos = {
                 actividad_id: actId,
                 dia_semana: dia,
                 hora_inicio: hora_inicio,
-                hora_fin: hora_fin
+                hora_fin: hora_fin,
+                observaciones: observaciones
             }));
 
             const btn = document.getElementById('btn-save-bulk');
@@ -488,7 +526,7 @@ window.ViewTurnos = {
     },
 
     async deleteHorario(horarioId, actIndex) {
-        if(!confirm("¿Seguro que deseas eliminar este horario?")) return;
+        if (!confirm("¿Seguro que deseas eliminar este horario?")) return;
         try {
             await GristData.deleteRecord('Horarios_Base', horarioId);
             await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
@@ -499,9 +537,23 @@ window.ViewTurnos = {
         }
     },
 
+    async editObservacion(horarioId, currentObs, actIndex) {
+        const nuevaObs = prompt("Editar Observación:", currentObs || '');
+        if (nuevaObs === null) return;
+
+        try {
+            await GristData.updateRecord('Horarios_Base', horarioId, { observaciones: nuevaObs });
+            await new Promise(r => setTimeout(r, 600));
+            await this.render();
+            this.openHorariosModal(actIndex);
+        } catch (e) {
+            alert("Error al editar observación");
+        }
+    },
+
     getAlumnoPagoStatus(alumnoId) {
         if (!this.pagosData || !this.planesData || !this.alumnosData) return 'var(--text-muted)';
-        
+
         let aIdx = this.alumnosData.id.indexOf(alumnoId);
         if (aIdx === -1) return 'var(--text-muted)';
 
@@ -513,12 +565,12 @@ window.ViewTurnos = {
         }
 
         const now = new Date();
-        const currentPeriod = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const hoyIso = now.toISOString().split('T')[0];
 
         let pagado = 0;
         if (this.pagosData && this.pagosData.id) {
-            for (let i=0; i < this.pagosData.id.length; i++) {
+            for (let i = 0; i < this.pagosData.id.length; i++) {
                 if (this.pagosData.alumno_id[i] === alumnoId && this.pagosData.mes_correspondiente[i] === currentPeriod) {
                     pagado += parseFloat(this.pagosData.monto_pagado[i]) || 0;
                 }
@@ -541,7 +593,7 @@ window.ViewTurnos = {
         const [year, month] = currentPeriod.split('-');
         const maxDaysInMonth = new Date(year, month, 0).getDate();
         if (dia > maxDaysInMonth) dia = maxDaysInMonth;
-        const vtoStr = `${year}-${month}-${String(dia).padStart(2,'0')}`;
+        const vtoStr = `${year}-${month}-${String(dia).padStart(2, '0')}`;
 
         const d1 = new Date(hoyIso + 'T00:00:00');
         const d2 = new Date(vtoStr + 'T00:00:00');
@@ -567,12 +619,12 @@ window.ViewTurnos = {
                             alumnoName = `${this.alumnosData.apellido[aIdx]}, ${this.alumnosData.nombre[aIdx]}`;
                         }
                     }
-                    
+
                     let tipoReserva = 'Regular';
                     if (this.reservasData.tipo_reserva && this.reservasData.tipo_reserva[i]) {
                         tipoReserva = this.reservasData.tipo_reserva[i];
                     }
-                    
+
                     let badge = '';
                     if (tipoReserva === 'Recuperación') {
                         badge = '<span style="background: var(--primary); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; margin-left: 8px;">Recup.</span>';
@@ -611,7 +663,7 @@ window.ViewTurnos = {
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
                     const planId = this.alumnosData.plan_id ? this.alumnosData.plan_id[i] : null;
                     let allowed = false;
-                    
+
                     if (planId && this.planesData && this.planesData.id) {
                         const planIdx = this.planesData.id.indexOf(planId);
                         if (planIdx !== -1) {
@@ -628,7 +680,7 @@ window.ViewTurnos = {
                 }
             });
         }
-        
+
         const formHtml = `
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid var(--border);">Anotados</h4>
@@ -693,15 +745,15 @@ window.ViewTurnos = {
             try {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
                 btn.disabled = true;
-                
+
                 await GristData.addRecord('Turnos_Alumnos', {
                     horario_base_id: horarioBaseId,
                     alumno_id: alumnoId,
                     tipo_reserva: tipoReserva
                 });
-                
+
                 await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
-                await this.render(); 
+                await this.render();
                 this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
             } catch (error) {
                 console.error("Error Grist:", error);
@@ -716,13 +768,13 @@ window.ViewTurnos = {
     },
 
     async bajarAlumno(reservaId, horarioBaseId, actId, actName, horarioLabel) {
-        if(!confirm("¿Dar de baja a este alumno de la clase?")) return;
+        if (!confirm("¿Dar de baja a este alumno de la clase?")) return;
         try {
             await GristData.deleteRecord('Turnos_Alumnos', reservaId);
             await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
             await this.render();
             this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
-        } catch(e) {
+        } catch (e) {
             alert('Error al eliminar alumno');
         }
     },
@@ -787,10 +839,10 @@ window.ViewTurnos = {
         const inputImporte = document.getElementById('pago-importe');
         const btnGuardar = document.getElementById('btn-guardar-pago');
 
-        if(selectAlumno) {
+        if (selectAlumno) {
             selectAlumno.addEventListener('change', (e) => {
                 const selectedOption = e.target.options[e.target.selectedIndex];
-                if(selectedOption && selectedOption.value !== "") {
+                if (selectedOption && selectedOption.value !== "") {
                     const importe = selectedOption.getAttribute('data-importe');
                     inputImporte.value = importe;
                 } else {
@@ -799,17 +851,17 @@ window.ViewTurnos = {
             });
         }
 
-        if(btnGuardar) {
+        if (btnGuardar) {
             btnGuardar.addEventListener('click', async () => {
                 const alumnoId = parseInt(selectAlumno.value);
                 const fecha = document.getElementById('pago-fecha').value;
                 const mesCorrespondiente = document.getElementById('pago-mes').value;
                 const importe = parseFloat(inputImporte.value);
 
-                if(!alumnoId) { alert("Debe seleccionar un alumno."); return; }
-                if(!fecha) { alert("Debe seleccionar una fecha."); return; }
-                if(!mesCorrespondiente) { alert("Debe indicar a qué mes corresponde este pago."); return; }
-                if(isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
+                if (!alumnoId) { alert("Debe seleccionar un alumno."); return; }
+                if (!fecha) { alert("Debe seleccionar una fecha."); return; }
+                if (!mesCorrespondiente) { alert("Debe indicar a qué mes corresponde este pago."); return; }
+                if (isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
 
                 try {
                     btnGuardar.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Registrando...';
@@ -823,12 +875,12 @@ window.ViewTurnos = {
                     });
 
                     alert("Pago registrado con éxito.");
-                    
+
                     selectAlumno.value = "";
                     inputImporte.value = 0;
                     document.getElementById('pago-fecha').value = new Date().toISOString().split('T')[0];
 
-                } catch(error) {
+                } catch (error) {
                     console.error("Error al registrar pago:", error);
                     alert("Ocurrió un error al registrar el pago.");
                 } finally {

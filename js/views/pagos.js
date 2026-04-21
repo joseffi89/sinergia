@@ -3,28 +3,37 @@ window.ViewPagos = {
     planesData: null,
     pagosData: null,
     periodoActual: '',
-    filtroPlanes: [], // Array de IDs de planes seleccionados
+    filtroPlanes: [],
 
     async render() {
         const container = document.getElementById('pagos-container');
-        if (!this.alumnosData) {
+        
+        if (!this.periodoActual) {
+            const now = new Date();
+            this.periodoActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        // Carga inmediata con caché
+        if (this.alumnosData) {
+            this.renderDashboard();
+        } else {
             container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando pagos...</p>';
         }
 
-        if (!this.periodoActual) {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            this.periodoActual = `${year}-${month}`;
-        }
-
         try {
-            this.alumnosData = await GristData.getTable('Alumnos');
-            this.planesData = await GristData.getTable('Planes');
-            this.pagosData = await GristData.getTable('Pagos');
-            
-            if (!this.alumnosData || !this.planesData) {
-                container.innerHTML = '<p style="color: var(--danger);">Error cargando datos base de Pagos.</p>';
+            // Actualización en segundo plano
+            const [alumnos, planes, pagos] = await Promise.all([
+                GristData.getTable('Alumnos'),
+                GristData.getTable('Planes'),
+                GristData.getTable('Pagos')
+            ]);
+
+            this.alumnosData = alumnos;
+            this.planesData = planes;
+            this.pagosData = pagos;
+
+            if (!alumnos || !planes) {
+                if (!this.alumnosData) container.innerHTML = '<p style="color: var(--danger);">Error cargando datos base de Pagos.</p>';
                 return;
             }
 
@@ -32,157 +41,106 @@ window.ViewPagos = {
 
         } catch (error) {
             console.error("Error en Vista Pagos:", error);
-            container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando pagos.</p>';
+            if (!this.alumnosData) container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando pagos.</p>';
         }
     },
 
     aplicarFiltros() {
         this.periodoActual = document.getElementById('filtro-periodo').value;
-        
-        // Recoger checkboxes de planes
         const checkboxes = document.querySelectorAll('.filtro-plan-chk');
         this.filtroPlanes = [];
         checkboxes.forEach(chk => {
             if (chk.checked) this.filtroPlanes.push(parseInt(chk.value));
         });
-
         this.renderDashboard();
     },
 
     calcularVencimiento(fechaIngresoIso, periodoYyyyMm) {
         if (!fechaIngresoIso) return null;
-        
-        // Extraer dia de la fecha de ingreso
         let dia = 1;
         if (typeof fechaIngresoIso === 'number') {
-            const dateObj = new Date(fechaIngresoIso * 1000);
-            dia = dateObj.getUTCDate();
+            dia = new Date(fechaIngresoIso * 1000).getUTCDate();
         } else if (typeof fechaIngresoIso === 'string') {
-            // asume YYYY-MM-DD
             const parts = fechaIngresoIso.split('-');
-            if (parts.length >= 3) {
-                dia = parseInt(parts[2].substring(0, 2));
-            }
+            if (parts.length >= 3) dia = parseInt(parts[2].substring(0, 2));
         }
-
         const [year, month] = periodoYyyyMm.split('-');
-        
-        // Asegurar que el dia no exceda los dias del mes seleccionado
         const maxDaysInMonth = new Date(year, month, 0).getDate();
         if (dia > maxDaysInMonth) dia = maxDaysInMonth;
-
-        const diaStr = String(dia).padStart(2, '0');
-        return `${year}-${month}-${diaStr}`; // YYYY-MM-DD local string
+        return `${year}-${month}-${String(dia).padStart(2, '0')}`;
     },
 
     getDifferenceInDays(dateStr1, dateStr2) {
         const d1 = new Date(dateStr1 + 'T00:00:00');
         const d2 = new Date(dateStr2 + 'T00:00:00');
-        const diffTime = d2.getTime() - d1.getTime();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
     },
 
     renderDashboard() {
         const container = document.getElementById('pagos-container');
-        
-        // --- PROCESAMIENTO DE DATOS --- //
+        if (!this.alumnosData) return;
+
         let totalActivos = 0;
         let totalACobrar = 0;
         let totalCobrado = 0;
-
         const filas = [];
         const hoyIso = new Date().toISOString().split('T')[0];
 
-        // Mapear pagos del periodo por alumno
         const pagosPorAlumno = {};
         if (this.pagosData && this.pagosData.id) {
             for (let i = 0; i < this.pagosData.id.length; i++) {
                 if (this.pagosData.mes_correspondiente[i] === this.periodoActual) {
                     const aId = this.pagosData.alumno_id[i];
-                    if (!pagosPorAlumno[aId]) pagosPorAlumno[aId] = 0;
-                    pagosPorAlumno[aId] += parseFloat(this.pagosData.monto_pagado[i]) || 0;
+                    pagosPorAlumno[aId] = (pagosPorAlumno[aId] || 0) + (parseFloat(this.pagosData.monto_pagado[i]) || 0);
                 }
             }
         }
 
-        // Mapear planes para acceso rapido y checkboxes
-        const planesActivosMap = {};
+        const planesMap = {};
         if (this.planesData && this.planesData.id) {
-            for(let p=0; p < this.planesData.id.length; p++) {
-                planesActivosMap[this.planesData.id[p]] = {
+            for (let p = 0; p < this.planesData.id.length; p++) {
+                planesMap[this.planesData.id[p]] = {
                     nombre: this.planesData.nombre_plan[p],
                     importe: parseFloat(this.planesData.importe[p]) || 0
                 };
             }
         }
 
-        if (this.alumnosData && this.alumnosData.id) {
-            for(let i=0; i < this.alumnosData.id.length; i++) {
+        if (this.alumnosData.id) {
+            for (let i = 0; i < this.alumnosData.id.length; i++) {
                 if (this.alumnosData.estado[i] === 'Activo') {
-                    // Check if entry date is before or during current period
                     let fechaIngreso = this.alumnosData.fecha_ingreso[i];
                     let fechaIso = '';
-                    if (typeof fechaIngreso === 'number') {
-                        fechaIso = new Date(fechaIngreso * 1000).toISOString().split('T')[0];
-                    } else if (typeof fechaIngreso === 'string') {
-                        fechaIso = fechaIngreso.split('T')[0];
-                    }
+                    if (typeof fechaIngreso === 'number') fechaIso = new Date(fechaIngreso * 1000).toISOString().split('T')[0];
+                    else if (typeof fechaIngreso === 'string') fechaIso = fechaIngreso.split('T')[0];
 
-                    // Ignorar alumnos que ingresan recien en meses FUTUROS al periodo filtrado
-                    if (fechaIso && fechaIso.substring(0, 7) > this.periodoActual) {
-                        continue;
-                    }
+                    if (fechaIso && fechaIso.substring(0, 7) > this.periodoActual) continue;
 
                     const planId = this.alumnosData.plan_id[i];
-                    
-                    // Aplicar Filtro de Planes
-                    if (this.filtroPlanes.length > 0 && !this.filtroPlanes.includes(planId)) {
-                        continue;
-                    }
+                    if (this.filtroPlanes.length > 0 && !this.filtroPlanes.includes(planId)) continue;
 
-                    const planInfo = planesActivosMap[planId] || { nombre: 'Sin Plan', importe: 0 };
-                    
+                    const planInfo = planesMap[planId] || { nombre: 'Sin Plan', importe: 0 };
                     totalActivos++;
                     totalACobrar += planInfo.importe;
 
                     const pAlumno = pagosPorAlumno[this.alumnosData.id[i]] || 0;
                     totalCobrado += pAlumno;
 
-                    // Lógica de Vencimiento
-                    let estadoPago = '';
-                    let colorEstado = '';
-                    let bgEstado = '';
+                    let estadoPago = '', colorEstado = '', bgEstado = '';
                     let fechaVtoStr = this.calcularVencimiento(fechaIso, this.periodoActual);
 
                     if (pAlumno >= planInfo.importe && planInfo.importe > 0) {
-                        estadoPago = 'Pagado';
-                        colorEstado = 'var(--success)';
-                        bgEstado = 'rgba(46, 204, 113, 0.1)';
+                        estadoPago = 'Pagado'; colorEstado = 'var(--success)'; bgEstado = 'rgba(46, 204, 113, 0.1)';
                     } else if (planInfo.importe === 0) {
-                        estadoPago = 'S/ Cargo';
-                        colorEstado = 'var(--text-muted)';
-                        bgEstado = 'rgba(255, 255, 255, 0.05)';
+                        estadoPago = 'S/ Cargo'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
                     } else {
-                        // Adeuda
                         if (!fechaVtoStr) {
-                            estadoPago = 'Sin Vto.';
-                            colorEstado = 'var(--text-muted)';
-                            bgEstado = 'rgba(255, 255, 255, 0.05)';
+                            estadoPago = 'Sin Vto.'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
                         } else {
-                            const diff = this.getDifferenceInDays(hoyIso, fechaVtoStr); // Vto - Hoy
-                            if (diff < 0) {
-                                estadoPago = 'Vencido';
-                                colorEstado = 'var(--danger)';
-                                bgEstado = 'rgba(231, 76, 60, 0.1)';
-                            } else if (diff <= 5) {
-                                estadoPago = 'Próx. a Vencer';
-                                colorEstado = 'var(--warning)';
-                                bgEstado = 'rgba(241, 196, 15, 0.1)';
-                            } else {
-                                estadoPago = 'Pendiente';
-                                colorEstado = '#aaa';
-                                bgEstado = 'rgba(255, 255, 255, 0.05)';
-                            }
+                            const diff = this.getDifferenceInDays(hoyIso, fechaVtoStr);
+                            if (diff < 0) { estadoPago = 'Vencido'; colorEstado = 'var(--danger)'; bgEstado = 'rgba(231, 76, 60, 0.1)'; }
+                            else if (diff <= 5) { estadoPago = 'Próx. a Vencer'; colorEstado = 'var(--warning)'; bgEstado = 'rgba(241, 196, 15, 0.1)'; }
+                            else { estadoPago = 'Pendiente'; colorEstado = '#aaa'; bgEstado = 'rgba(255, 255, 255, 0.05)'; }
                         }
                     }
 
@@ -204,20 +162,18 @@ window.ViewPagos = {
             }
         }
 
-        // --- RENDERIZADO HTML --- //
-        
         let planCheckboxesHtml = '';
-        Object.keys(planesActivosMap).forEach(pId => {
+        Object.keys(planesMap).forEach(pId => {
             const checked = this.filtroPlanes.includes(parseInt(pId)) ? 'checked' : '';
             planCheckboxesHtml += `
                 <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:pointer;">
                     <input type="checkbox" class="filtro-plan-chk" value="${pId}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
-                    ${planesActivosMap[pId].nombre}
+                    ${planesMap[pId].nombre}
                 </label>
             `;
         });
 
-        const html = `
+        container.innerHTML = `
             <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
                 <div class="kpi-card" style="background: var(--bg-card); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 15px;">
                     <i class="ph ph-users" style="font-size: 32px; color: var(--primary);"></i>
@@ -275,7 +231,5 @@ window.ViewPagos = {
                 </table>
             </div>
         `;
-        
-        container.innerHTML = html;
     }
 };

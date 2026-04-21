@@ -3,87 +3,98 @@ window.ViewAlumnos = {
     planesMap: {},
     async render() {
         const container = document.getElementById('alumnos-container');
-        if (!this.currentData) {
+        
+        // Carga inmediata con caché
+        if (this.currentData) {
+            this.drawUI();
+        } else {
             container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando alumnos...</p>';
         }
 
         try {
+            // Actualización en segundo plano
             const alumnos = await GristData.getTable('Alumnos');
             this.currentData = alumnos;
             const planes = await GristData.getTable('Planes');
-            
+
             if (!alumnos) {
-                container.innerHTML = '<p style="color: var(--danger);">Error al cargar alumnos.</p>';
+                if (!this.currentData) container.innerHTML = '<p style="color: var(--danger);">Error al cargar alumnos.</p>';
                 return;
             }
 
-            // Mapeo de Planes para mostrar el nombre en vez del ID
-            const planesMap = {};
+            // Mapeo de Planes
+            this.planesMap = {};
             if (planes && planes.id) {
                 planes.id.forEach((pid, index) => {
-                    planesMap[pid] = planes.nombre_plan[index];
+                    this.planesMap[pid] = planes.nombre_plan[index];
                 });
             }
 
-            let rows = '';
-            if (alumnos.id && alumnos.id.length > 0) {
-                for(let i=0; i < alumnos.id.length; i++) {
-                    const planId = alumnos.plan_id ? alumnos.plan_id[i] : null;
-                    const planName = planesMap[planId] || 'Sin Plan';
-                    const estado = alumnos.estado ? alumnos.estado[i] : 'Activo';
-                    const estadoColor = estado === 'Activo' ? 'var(--success)' : 'var(--danger)';
-                    const apellido = alumnos.apellido ? alumnos.apellido[i] : '-';
-                    const nombre = alumnos.nombre ? alumnos.nombre[i] : '-';
-                    
-                    rows += `
-                        <tr style="border-bottom: 1px solid var(--border);">
-                            <td style="padding: 12px; font-weight: 500;">${apellido}, ${nombre}</td>
-                            <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
-                            <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
-                            <td style="padding: 12px; text-align: right;">
-                                <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;" onclick="window.ViewAlumnos.openEditModal(${i})"><i class="ph ph-pencil-simple"></i></button>
-                            </td>
-                        </tr>
-                    `;
-                }
-            } else {
-                rows = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--text-muted);">No hay alumnos registrados</td></tr>';
-            }
-
-            const searchHtml = `
-                <div style="margin-bottom: 15px; display:flex; justify-content:flex-end;">
-                    <div style="position:relative; width: 100%; max-width: 300px;">
-                        <i class="ph ph-magnifying-glass" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                        <input type="text" id="filtro-alumnos" class="form-control" placeholder="Buscar alumno..." oninput="window.ViewAlumnos.filtrarTabla(this.value)" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 35px;">
-                    </div>
-                </div>
-            `;
-
-            const html = `
-                ${searchHtml}
-                <div class="card" style="overflow-x: auto;">
-                    <table id="tabla-alumnos" style="width: 100%; border-collapse: collapse; text-align: left;">
-                        <thead>
-                            <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 13px; text-transform: uppercase;">
-                                <th style="padding: 12px;">Alumno</th>
-                                <th style="padding: 12px;">Plan</th>
-                                <th style="padding: 12px;">Estado</th>
-                                <th style="padding: 12px; text-align:right;">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rows}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
-            container.innerHTML = html;
+            this.drawUI();
 
         } catch (error) {
             console.error(error);
-            container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando alumnos.</p>';
+            if (!this.currentData) container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando alumnos.</p>';
         }
+    },
+
+    drawUI() {
+        const container = document.getElementById('alumnos-container');
+        const alumnos = this.currentData;
+        if (!alumnos) return;
+
+        let rows = '';
+        if (alumnos.id && alumnos.id.length > 0) {
+            for (let i = 0; i < alumnos.id.length; i++) {
+                const planId = alumnos.plan_id ? alumnos.plan_id[i] : null;
+                const planName = this.planesMap[planId] || 'Sin Plan';
+                const estado = alumnos.estado ? alumnos.estado[i] : 'Activo';
+                const estadoColor = estado === 'Activo' ? 'var(--success)' : 'var(--danger)';
+                const apellido = alumnos.apellido ? alumnos.apellido[i] : '-';
+                const nombre = alumnos.nombre ? alumnos.nombre[i] : '-';
+
+                rows += `
+                    <tr style="border-bottom: 1px solid var(--border);">
+                        <td style="padding: 12px; font-weight: 500;">${apellido}, ${nombre}</td>
+                        <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
+                        <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
+                        <td style="padding: 12px; text-align: right;">
+                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;" onclick="window.ViewAlumnos.openEditModal(${i})"><i class="ph ph-pencil-simple"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }
+        } else {
+            rows = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--text-muted);">No hay alumnos registrados</td></tr>';
+        }
+
+        const searchHtml = `
+            <div style="margin-bottom: 15px; display:flex; justify-content:flex-end;">
+                <div style="position:relative; width: 100%; max-width: 300px;">
+                    <i class="ph ph-magnifying-glass" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                    <input type="text" id="filtro-alumnos" class="form-control" placeholder="Buscar alumno..." oninput="window.ViewAlumnos.filtrarTabla(this.value)" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 35px;">
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = `
+            ${searchHtml}
+            <div class="card" style="overflow-x: auto;">
+                <table id="tabla-alumnos" style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 13px; text-transform: uppercase;">
+                            <th style="padding: 12px;">Alumno</th>
+                            <th style="padding: 12px;">Plan</th>
+                            <th style="padding: 12px;">Estado</th>
+                            <th style="padding: 12px; text-align:right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
     },
 
     filtrarTabla(val) {
@@ -99,7 +110,7 @@ window.ViewAlumnos = {
     async openEditModal(index) {
         const alumnos = this.currentData;
         if (!alumnos || !alumnos.id) return;
-        
+
         const id = alumnos.id[index];
         const nombre = alumnos.nombre ? alumnos.nombre[index] : '';
         const apellido = alumnos.apellido ? alumnos.apellido[index] : '';
@@ -109,23 +120,22 @@ window.ViewAlumnos = {
         const plan_id = alumnos.plan_id ? alumnos.plan_id[index] : '';
         const estado = alumnos.estado ? alumnos.estado[index] : 'Activo';
 
-        // Grist devuelve fechas como timestamp Unix (segundos)
         if (typeof fecha_ingreso === 'number') {
             fecha_ingreso = new Date(fecha_ingreso * 1000).toISOString().split('T')[0];
         } else if (fecha_ingreso && typeof fecha_ingreso === 'string') {
-            fecha_ingreso = fecha_ingreso.split('T')[0]; // Por si viene como ISO
+            fecha_ingreso = fecha_ingreso.split('T')[0];
         }
 
         let options = '<option value="">Seleccionar...</option>';
         try {
             const planes = await GristData.getTable('Planes');
-            if(planes && planes.id) {
+            if (planes && planes.id) {
                 planes.id.forEach((pid, i) => {
                     const selected = pid === plan_id ? 'selected' : '';
                     options += `<option value="${pid}" ${selected}>${planes.nombre_plan[i]}</option>`;
                 });
             }
-        } catch(e) {}
+        } catch (e) { }
 
         const formHtml = `
             <div class="form-group">
@@ -183,9 +193,9 @@ window.ViewAlumnos = {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
                 btn.disabled = true;
                 await GristData.updateRecord('Alumnos', id, data);
-                await new Promise(r => setTimeout(r, 600)); // Delay to allow Grist backend to sync
+                await new Promise(r => setTimeout(r, 600));
                 window.Modal.close();
-                this.render(); // Refrescar lista
+                this.render();
             } catch (e) {
                 alert('Error al actualizar el alumno');
                 btn.innerHTML = 'Actualizar';
