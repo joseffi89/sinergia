@@ -104,18 +104,18 @@ window.ViewTurnos = {
         this.renderTabContent();
     },
 
-    getAnotados(horarioBaseId) {
-        if (!this.reservasData || !this.reservasData.id) return 0;
-        let count = 0;
+    getAnotadosInfo(horarioBaseId) {
+        if (!this.reservasData || !this.reservasData.id) return { regulares: 0, recuperaciones: 0, excepciones: 0 };
+        let reg = 0, rec = 0, exc = 0;
         for (let i = 0; i < this.reservasData.id.length; i++) {
             if (this.reservasData.horario_base_id && this.reservasData.horario_base_id[i] === horarioBaseId) {
                 const tipo = this.reservasData.tipo_reserva ? this.reservasData.tipo_reserva[i] : 'Regular';
-                if (tipo !== 'Recuperación' && tipo !== 'Excepción') {
-                    count++;
-                }
+                if (tipo === 'Recuperación') rec++;
+                else if (tipo === 'Excepción') exc++;
+                else reg++;
             }
         }
-        return count;
+        return { regulares: reg, recuperaciones: rec, excepciones: exc };
     },
 
     renderClasesDia(dia, horarios, actividades) {
@@ -149,16 +149,19 @@ window.ViewTurnos = {
                     }
                 }
 
-                const anotados = this.getAnotados(horarios.id[i]);
-                const cupoBadge = cupoMax > 0 ? `${anotados}/${cupoMax}` : `${anotados}`;
+                const info = this.getAnotadosInfo(horarios.id[i]);
+                const cupoBadge = cupoMax > 0 ? `${info.regulares}/${cupoMax}` : `${info.regulares}`;
+                let extraBadges = '';
+                if (info.recuperaciones > 0) extraBadges += `<span style="color:var(--primary); font-size:11px; margin-right:5px; font-weight:600;">${info.recuperaciones} R</span>`;
+                if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
 
                 clasesHtml += `
                     <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${horarios.id[i]}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
                         <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${horarios.hora_inicio[i]} - ${horarios.hora_fin[i]}</div>
                         <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos Regulares: ${cupoBadge}</span>
-                            <i class="ph ph-users" style="color: var(--text-muted);"></i>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
+                            <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
                         </div>
                     </div>
                 `;
@@ -471,8 +474,8 @@ window.ViewTurnos = {
         }
 
         // Available students combo box with grouping
-        let habilitadosHtml = '';
-        let otrosHtml = '';
+        let habilitadosHtml = '<option value="">Seleccionar Alumno...</option>';
+        let todosHtml = '<option value="">Seleccionar Alumno...</option>';
         if (this.alumnosData && this.alumnosData.id) {
             this.alumnosData.id.forEach((aid, i) => {
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
@@ -491,15 +494,11 @@ window.ViewTurnos = {
 
                     const opt = `<option value="${aid}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
                     if (allowed) habilitadosHtml += opt;
-                    else otrosHtml += opt;
+                    todosHtml += opt;
                 }
             });
         }
         
-        let alumnosOptions = '<option value="">Seleccionar Alumno...</option>';
-        if (habilitadosHtml) alumnosOptions += `<optgroup label="Habilitados por su Plan">${habilitadosHtml}</optgroup>`;
-        if (otrosHtml) alumnosOptions += `<optgroup label="No habilitados (Para Excepciones)">${otrosHtml}</optgroup>`;
-
         const formHtml = `
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid var(--border);">Anotados</h4>
@@ -507,17 +506,27 @@ window.ViewTurnos = {
             </div>
             
             <div class="form-group">
-                <label>Anotar Nuevo Alumno</label>
+                <label>Anotar Regular</label>
                 <div style="display:flex; gap:10px;">
-                    <select id="modal-select-alumno" class="form-control" style="flex:2;">
-                        ${alumnosOptions}
+                    <select id="modal-select-regular" class="form-control" style="flex:1;">
+                        ${habilitadosHtml}
                     </select>
-                    <select id="modal-select-tipo" class="form-control" style="flex:1;">
-                        <option value="Regular">Regular</option>
-                        <option value="Recuperación">Recuperación</option>
-                        <option value="Excepción">Excepción</option>
+                    <button class="btn btn-primary" id="btn-anotar-regular">Anotar</button>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top: 15px;">
+                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-recuperacion">+ Recuperación</button>
+                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-excepcion">+ Excepción</button>
+            </div>
+
+            <div class="form-group" id="special-enrollment-group" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+                <label id="special-enrollment-label" style="color:var(--primary);">Anotar Especial</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="modal-select-special" class="form-control" style="flex:1;">
+                        ${todosHtml}
                     </select>
-                    <button class="btn btn-primary" id="btn-anotar-alumno">Anotar</button>
+                    <button class="btn btn-primary" id="btn-anotar-special">Anotar</button>
                 </div>
             </div>
         `;
@@ -528,18 +537,32 @@ window.ViewTurnos = {
 
         window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
 
-        document.getElementById('btn-anotar-alumno').addEventListener('click', async () => {
-            const alumnoId = parseInt(document.getElementById('modal-select-alumno').value);
+        let tipoEspecialActual = 'Recuperación';
+
+        document.getElementById('btn-show-recuperacion').addEventListener('click', () => {
+            document.getElementById('special-enrollment-group').style.display = 'block';
+            document.getElementById('special-enrollment-label').innerText = 'Anotar Recuperación';
+            document.getElementById('special-enrollment-label').style.color = 'var(--primary)';
+            tipoEspecialActual = 'Recuperación';
+        });
+
+        document.getElementById('btn-show-excepcion').addEventListener('click', () => {
+            document.getElementById('special-enrollment-group').style.display = 'block';
+            document.getElementById('special-enrollment-label').innerText = 'Anotar Excepción';
+            document.getElementById('special-enrollment-label').style.color = 'var(--danger)';
+            tipoEspecialActual = 'Excepción';
+        });
+
+        const handleAnotar = async (btnId, selectId, tipoReserva) => {
+            const alumnoId = parseInt(document.getElementById(selectId).value);
             if (!alumnoId) {
                 alert("Seleccione un alumno");
                 return;
             }
-            
-            const btn = document.getElementById('btn-anotar-alumno');
+            const btn = document.getElementById(btnId);
             try {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
                 btn.disabled = true;
-                const tipoReserva = document.getElementById('modal-select-tipo').value;
                 
                 await GristData.addRecord('Turnos_Alumnos', {
                     horario_base_id: horarioBaseId,
@@ -549,14 +572,16 @@ window.ViewTurnos = {
                 
                 await this.render(); 
                 this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
-                
             } catch (error) {
                 console.error("Error Grist:", error);
                 alert('Error al anotar alumno: ' + (error.message || 'Verifica la consola'));
                 btn.innerHTML = 'Anotar';
                 btn.disabled = false;
             }
-        });
+        };
+
+        document.getElementById('btn-anotar-regular').addEventListener('click', () => handleAnotar('btn-anotar-regular', 'modal-select-regular', 'Regular'));
+        document.getElementById('btn-anotar-special').addEventListener('click', () => handleAnotar('btn-anotar-special', 'modal-select-special', tipoEspecialActual));
     },
 
     async bajarAlumno(reservaId, horarioBaseId, actId, actName, horarioLabel) {
