@@ -52,13 +52,38 @@ window.ViewTurnos = {
     renderTabContent() {
         const container = document.getElementById('turnos-container');
         if (this.currentTab === 'tab-calendario') {
-            container.innerHTML = this.getCalendarioHtml();
+            const existingHeader = document.querySelector('.calendar-header');
+            if (existingHeader) {
+                const gridContainer = document.querySelector('.calendar-grid');
+                if (gridContainer) {
+                    gridContainer.outerHTML = this.getCalendarioGridHtml();
+                }
+            } else {
+                container.innerHTML = this.getCalendarioHtml();
+            }
         } else if (this.currentTab === 'tab-actividades') {
             container.innerHTML = this.getActividadesHtml();
         } else if (this.currentTab === 'tab-pagos') {
             container.innerHTML = this.getPagosHtml();
             this.setupPagosEvents();
         }
+    },
+
+    getCalendarioGridHtml() {
+        const actividades = this.actividadesData;
+        const horarios = this.horariosData;
+        return `
+            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
+                ${['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'].map(dia => `
+                    <div class="calendar-col">
+                        <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;">${dia}</h3>
+                        <div class="dia-cards">
+                            ${this.renderClasesDia(dia, horarios, actividades)}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
     },
 
     getCalendarioHtml() {
@@ -99,16 +124,7 @@ window.ViewTurnos = {
                     ${searchInputHtml}
                 </div>
             </div>
-            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
-                ${['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'].map(dia => `
-                    <div class="calendar-col">
-                        <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;">${dia}</h3>
-                        <div class="dia-cards">
-                            ${this.renderClasesDia(dia, horarios, actividades)}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
+            ${this.getCalendarioGridHtml()}
         `;
     },
 
@@ -483,6 +499,59 @@ window.ViewTurnos = {
         }
     },
 
+    getAlumnoPagoStatus(alumnoId) {
+        if (!this.pagosData || !this.planesData || !this.alumnosData) return 'var(--text-muted)';
+        
+        let aIdx = this.alumnosData.id.indexOf(alumnoId);
+        if (aIdx === -1) return 'var(--text-muted)';
+
+        const planId = this.alumnosData.plan_id[aIdx];
+        let importePlan = 0;
+        if (planId) {
+            let pIdx = this.planesData.id.indexOf(planId);
+            if (pIdx !== -1) importePlan = this.planesData.importe[pIdx] || 0;
+        }
+
+        const now = new Date();
+        const currentPeriod = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        const hoyIso = now.toISOString().split('T')[0];
+
+        let pagado = 0;
+        if (this.pagosData && this.pagosData.id) {
+            for (let i=0; i < this.pagosData.id.length; i++) {
+                if (this.pagosData.alumno_id[i] === alumnoId && this.pagosData.mes_correspondiente[i] === currentPeriod) {
+                    pagado += parseFloat(this.pagosData.monto_pagado[i]) || 0;
+                }
+            }
+        }
+
+        if (pagado >= importePlan && importePlan > 0) return 'var(--success)';
+        if (importePlan === 0) return 'var(--text-muted)';
+
+        let fechaIngresoIso = this.alumnosData.fecha_ingreso[aIdx];
+        let dia = 1;
+        if (typeof fechaIngresoIso === 'number') {
+            const dateObj = new Date(fechaIngresoIso * 1000);
+            dia = dateObj.getUTCDate();
+        } else if (typeof fechaIngresoIso === 'string') {
+            const parts = fechaIngresoIso.split('-');
+            if (parts.length >= 3) dia = parseInt(parts[2].substring(0, 2));
+        }
+
+        const [year, month] = currentPeriod.split('-');
+        const maxDaysInMonth = new Date(year, month, 0).getDate();
+        if (dia > maxDaysInMonth) dia = maxDaysInMonth;
+        const vtoStr = `${year}-${month}-${String(dia).padStart(2,'0')}`;
+
+        const d1 = new Date(hoyIso + 'T00:00:00');
+        const d2 = new Date(vtoStr + 'T00:00:00');
+        const diffDays = Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) return 'var(--danger)'; // Vencido
+        if (diffDays <= 5) return 'var(--warning)'; // Proximo a vencer
+        return '#aaa'; // Pendiente
+    },
+
     async openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel) {
         // Enrolled students list
         let enrolledHtml = '';
@@ -511,7 +580,10 @@ window.ViewTurnos = {
                         badge = '<span style="background: var(--danger); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; margin-left: 8px;">Excep.</span>';
                     }
 
-                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge: badge });
+                    const colorPago = this.getAlumnoPagoStatus(alumnoId);
+                    const circleHtml = `<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${colorPago}; margin-right:8px; flex-shrink:0;" title="Estado de Pago Actual"></span>`;
+
+                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge: badge, circle: circleHtml });
                 }
             }
 
@@ -520,7 +592,7 @@ window.ViewTurnos = {
                     <ul style="list-style:none; padding:0; margin:0 0 20px 0; font-size:13px;">
                         ${enrolled.map(en => `
                             <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
-                                <span><i class="ph ph-user"></i> ${en.name} ${en.badge}</span>
+                                <span style="display:flex; align-items:center;">${en.circle} <i class="ph ph-user" style="margin-right:4px;"></i> ${en.name} ${en.badge}</span>
                                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, ${actId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
                             </li>
                         `).join('')}
