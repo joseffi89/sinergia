@@ -23,14 +23,20 @@ window.ViewAlumnos = {
             let rows = '';
             if (alumnos.id && alumnos.id.length > 0) {
                 for(let i=0; i < alumnos.id.length; i++) {
-                    const planName = planesMap[alumnos.plan_id[i]] || 'Sin Plan';
-                    const estadoColor = alumnos.estado[i] === 'Activo' ? 'var(--success)' : 'var(--danger)';
+                    const planId = alumnos.plan_id ? alumnos.plan_id[i] : null;
+                    const planName = planesMap[planId] || 'Sin Plan';
+                    const estado = alumnos.estado ? alumnos.estado[i] : 'Activo';
+                    const estadoColor = estado === 'Activo' ? 'var(--success)' : 'var(--danger)';
+                    const apellido = alumnos.apellido ? alumnos.apellido[i] : '-';
+                    const nombre = alumnos.nombre ? alumnos.nombre[i] : '-';
+                    const telefono = alumnos.telefono ? alumnos.telefono[i] : '-';
+                    
                     rows += `
                         <tr style="border-bottom: 1px solid var(--border);">
-                            <td style="padding: 12px; font-weight: 500;">${alumnos.apellido[i]}, ${alumnos.nombre[i]}</td>
-                            <td style="padding: 12px; color: var(--text-muted);">${alumnos.telefono[i] || '-'}</td>
+                            <td style="padding: 12px; font-weight: 500;">${apellido}, ${nombre}</td>
+                            <td style="padding: 12px; color: var(--text-muted);">${telefono}</td>
                             <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
-                            <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${alumnos.estado[i]}</span></td>
+                            <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
                             <td style="padding: 12px; text-align: right;">
                                 <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;"><i class="ph ph-pencil-simple"></i></button>
                             </td>

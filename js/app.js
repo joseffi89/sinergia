@@ -36,6 +36,8 @@ const App = {
                     }
                 } catch(e) {}
 
+                const hoy = new Date().toISOString().split('T')[0];
+
                 const formHtml = `
                     <div class="form-group">
                         <label>Nombre</label>
@@ -44,6 +46,22 @@ const App = {
                     <div class="form-group">
                         <label>Apellido</label>
                         <input type="text" id="al-apellido" class="form-control" placeholder="Ej. Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label>DNI</label>
+                        <input type="text" id="al-dni" class="form-control" placeholder="Ej. 12345678">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="al-email" class="form-control" placeholder="Ej. juan@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="text" id="al-telefono" class="form-control" placeholder="Ej. 1122334455">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Ingreso</label>
+                        <input type="date" id="al-fecha-ingreso" class="form-control" value="${hoy}">
                     </div>
                     <div class="form-group">
                         <label>Plan</label>
@@ -61,6 +79,10 @@ const App = {
                     const data = {
                         nombre: document.getElementById('al-nombre').value,
                         apellido: document.getElementById('al-apellido').value,
+                        dni: document.getElementById('al-dni').value,
+                        email: document.getElementById('al-email').value,
+                        telefono: document.getElementById('al-telefono').value,
+                        fecha_ingreso: document.getElementById('al-fecha-ingreso').value, // Formato YYYY-MM-DD compatible con Date
                         plan_id: parseInt(document.getElementById('al-plan').value) || null,
                         estado: 'Activo'
                     };
