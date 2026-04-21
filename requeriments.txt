@@ -1,0 +1,38 @@
+Quiero crear una app responsive para mi gimnasio llamado SINERGIA en la herramienta GRIST, en la que esta funcionara como base de datos y ahi también se renderiza la app a través de un widget linkeado a github. 
+el objetivo es poder gestionar actividades, horarios, turnos y pagos de los alumnos. 
+La idea es que la información sea persistente y las tablas se relacionen para tomar 
+info una de otro. 
+En cuanto a los colores institucionales el color de SINERGIA es #f39c12, elegir colores acordes a ese, armoniosos, y hacerla toda UX friendly.
+
+La idea es que haya un rol Admin, yo otro rol Gestión.
+
+
+VISTA TURNOS
+Esta vista deben poder verse el calendario de turnos y actividades, cómo también registrar el pago de un alumno. Hay clases de Lunes a Sábados, que el calendario muestre en base las actividades registradas.
+Debe haber una pestaña de Actividades en la que haya ABM de actividades: Nombre de la actividad, cupo, y los días y horarios habilitados para cada una, asignarle un colorcito que luego se muestre en el calendario. En el listado de actividades cada horario se pueda eliminar y/o editar. También que se pueda filtrar por actividad
+
+En la vista de calendario, además de ver poder navegar por semana, también me gustaría filtrar por actividad o horario, o ambos, y también por día.
+La idea es que cada actividad se vea como una tarjetita con una etiqueta que muestre los cupos libres, y al hacer click sobre la tarjeta aparezca el listado de alumnos (de la tabla Alumnos, que debe corresponder la actividad con el tipo de plan), o los cupos para registrar el alumno.
+Debería tener una pestaña para registrar el pago del alumno, que seleccionando el alumno se complete con el campo del valor del plan, y el usuario registre el pago, y esto quede asentado en la tabla Pagos.
+A su vez, me gustaría que al lado de cada nombre del alumno se vea un circulito de color que marque el status del pago.
+Las activiades también que tengan un detallecito en color, que se puedan diferenciarse.
+
+VISTA ALUMNOS
+Aca va estar el listado de alumnos, y el ABM de alumnos. Debería ser un formulario que se complete de los siguientes datos: Apellido, Nombre, Fecha de Ingreso, Plan (desplegable de la tabla Planes), Teléfono y Email. En base al plan seleccionado, se le asignara una actividad. Por ahora va a ser una actividad por plan. Y de esto se tomara el dato para mostrarlo en el calendario.
+Cuando se cargue un nuevo alumno se pueda elegir los dias y horarios (segun el plan) y que queden fijos en el calendario a menos que se borren o el alumno este inactivo. Y desde el calendario si se borra un cupo que consulte si quiere borrar ese dia o toda la serie, y para agregar lo mismo. Si cargo un alumno en tal horario que me consulte si quiero agregar la serie o solo ese horario.    
+
+
+VISTA PLANES
+Aca debe haber un ABM de planes con los siguientes campos: Nombre, un choice multiple de actividad,Tipo, Veces por Semana e Importe. La idea es que el nombre del plan sea la concatenación del Tipo y las veces por semana. Ej: Funcionalx2
+Tener en cuenta que un plan puede incluir mas de una actividad. Ej: Plan Fitnesx2 implicaria que puede elegir entre Zumba, Baile y Funcional.
+
+VISTA PAGOS
+En esta vista se debe poder ver por período el pago de los alumnos. Lo ideal es que por mes se vaya generando el registro de los alumnos activos para poder chequear quién debe y quién no. De la fecha de ingreso se toma el numéro del día para crear la fecha de vencimiento del mes. Ej: El alumno ingreso el 05/03/2026, todos los 5 de cada mes será la fecha de vencimiento. En base a esto crear etiquetas de, Pendiente (en color grisesito), Próximo a vencer (en amarrillo cuando falten 5 días), y Vencido (rojo).
+
+En esta vista me gustaria tener como un header con indicadores de cantidad de alumnos activos, total a cobrar, total cobrado (por defecto del mes vigente, pero que tambien se pueda filtrar). También que se pueda filtrar por Tipo de Plan, y que se filtren los pagos y también que los totales se adapten a estos filtros. Que se puede seleccionar mas de uno, porque puedo querer ver cuando recaude de dos actividades en particular. Aca siempre tienen que mostrarse los alumnos activos a partir de la fecha de ingreso.
+
+VISTA GASTOS
+
+En esta vista la idea es que haya un abm de gastos por periodo.  Quisiera que ya esten cargados los items de la tabla que te permita agregarle el monto y hacer el check de pagado. También permitir editar/eliminar las categorías existentes.
+La idea es que sea vaya viendo lo que se carga en el mes para también controlar aquello que falta pagar. 
+

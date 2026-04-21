@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sinergia Gym App</title>
+    <!-- Grist Plugin API -->
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">SINER<span>GIA</span></h1>
+            </div>
+            <ul class="nav-links">
+                <li><button class="nav-btn active" data-view="turnos"><i class="ph ph-calendar-check"></i> Turnos</button></li>
+                <li><button class="nav-btn" data-view="alumnos"><i class="ph ph-users"></i> Alumnos</button></li>
+                <li><button class="nav-btn" data-view="planes"><i class="ph ph-barbell"></i> Planes</button></li>
+                <li><button class="nav-btn" data-view="pagos"><i class="ph ph-currency-dollar"></i> Pagos</button></li>
+                <li><button class="nav-btn" data-view="gastos"><i class="ph ph-receipt"></i> Gastos</button></li>
+            </ul>
+            <div class="user-info">
+                <i class="ph ph-user-circle"></i>
+                <span id="user-role">Cargando rol...</span>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Vistas -->
+            <section id="view-turnos" class="view active">
+                <header class="view-header">
+                    <h2>Calendario de Turnos</h2>
+                    <button class="btn btn-primary" id="btn-nueva-clase"><i class="ph ph-plus"></i> Nueva Clase</button>
+                </header>
+                <div class="view-body" id="turnos-container">
+                    <!-- Contenido dinámico -->
+                </div>
+            </section>
+
+            <section id="view-alumnos" class="view">
+                <header class="view-header">
+                    <h2>Gestión de Alumnos</h2>
+                    <button class="btn btn-primary" id="btn-nuevo-alumno"><i class="ph ph-plus"></i> Nuevo Alumno</button>
+                </header>
+                <div class="view-body" id="alumnos-container">
+                    <!-- Contenido dinámico -->
+                </div>
+            </section>
+
+            <section id="view-planes" class="view">
+                <header class="view-header">
+                    <h2>Planes y Actividades</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="btn-nueva-actividad"><i class="ph ph-plus"></i> Actividad</button>
+                        <button class="btn btn-primary" id="btn-nuevo-plan"><i class="ph ph-plus"></i> Plan</button>
+                    </div>
+                </header>
+                <div class="view-body" id="planes-container">
+                    <!-- Contenido dinámico -->
+                </div>
+            </section>
+
+            <section id="view-pagos" class="view">
+                <header class="view-header">
+                    <h2>Pagos y Cobranza</h2>
+                </header>
+                <div class="view-body" id="pagos-container">
+                    <!-- Dashboard Indicators -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <i class="ph ph-users"></i>
+                            <div class="kpi-data">
+                                <h3>Activos</h3>
+                                <p id="kpi-activos">0</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <i class="ph ph-trend-up"></i>
+                            <div class="kpi-data">
+                                <h3>Total a Cobrar</h3>
+                                <p id="kpi-cobrar">$0</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card highlight">
+                            <i class="ph ph-money"></i>
+                            <div class="kpi-data">
+                                <h3>Cobrado</h3>
+                                <p id="kpi-cobrado">$0</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Tabla de pagos -->
+                    <div id="pagos-list"></div>
+                </div>
+            </section>
+
+            <section id="view-gastos" class="view">
+                <header class="view-header">
+                    <h2>Gastos Mensuales</h2>
+                    <button class="btn btn-primary" id="btn-nuevo-gasto"><i class="ph ph-plus"></i> Registrar Gasto</button>
+                </header>
+                <div class="view-body" id="gastos-container">
+                    <!-- Contenido dinámico -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/grist-api.js"></script>
+    <script src="js/views/turnos.js"></script>
+    <script src="js/views/alumnos.js"></script>
+    <script src="js/views/planes.js"></script>
+    <script src="js/views/pagos.js"></script>
+    <script src="js/views/gastos.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
