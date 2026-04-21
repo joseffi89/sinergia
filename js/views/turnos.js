@@ -167,15 +167,15 @@ window.ViewTurnos = {
         `;
 
         return `
-            <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
-                <div class="filters" style="display:flex; gap: 10px; flex-wrap:wrap; align-items:center;">
-                    <select id="filtro-actividad" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+            <div class="calendar-header" style="margin-bottom: 20px;">
+                <div class="filters" style="display:flex; gap: 8px; align-items:center; flex-wrap:wrap;">
+                    <select id="filtro-actividad" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${optionsHtml}
                     </select>
-                    <select id="filtro-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                    <select id="filtro-turno" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${turnosHtml}
                     </select>
-                    <select id="filtro-ubicacion" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                    <select id="filtro-ubicacion" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${ubicacionesHtml}
                     </select>
                     ${searchInputHtml}
