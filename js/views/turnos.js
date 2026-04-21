@@ -2,6 +2,10 @@ window.ViewTurnos = {
     currentTab: 'tab-calendario',
     actividadesData: null,
     horariosData: null,
+    reservasData: null,
+    alumnosData: null,
+    filtroActividad: '',
+    filtroTurno: '',
 
     async render() {
         const container = document.getElementById('turnos-container');
@@ -11,6 +15,8 @@ window.ViewTurnos = {
             // Obtener datos
             this.actividadesData = await GristData.getTable('Actividades');
             this.horariosData = await GristData.getTable('Horarios_Base');
+            try { this.reservasData = await GristData.getTable('Turnos_Alumnos'); } catch(e) { this.reservasData = { id: [] }; }
+            try { this.alumnosData = await GristData.getTable('Alumnos'); } catch(e) { this.alumnosData = { id: [] }; }
             
             if (!this.actividadesData || !this.horariosData) {
                 container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
@@ -55,15 +61,26 @@ window.ViewTurnos = {
         let optionsHtml = '<option value="">Todas las Actividades</option>';
         if (actividades && actividades.id) {
             actividades.id.forEach((id, index) => {
-                optionsHtml += `<option value="${id}">${actividades.nombre_actividad[index]}</option>`;
+                const selected = (this.filtroActividad == id) ? 'selected' : '';
+                optionsHtml += `<option value="${id}" ${selected}>${actividades.nombre_actividad[index]}</option>`;
             });
         }
 
+        const turnosHtml = `
+            <option value="" ${this.filtroTurno === '' ? 'selected' : ''}>Todos los turnos</option>
+            <option value="mañana" ${this.filtroTurno === 'mañana' ? 'selected' : ''}>Mañana (hasta 12:00)</option>
+            <option value="tarde" ${this.filtroTurno === 'tarde' ? 'selected' : ''}>Tarde (12:00 a 18:00)</option>
+            <option value="noche" ${this.filtroTurno === 'noche' ? 'selected' : ''}>Noche (desde 18:00)</option>
+        `;
+
         return `
             <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px;">
-                <div class="filters">
-                    <select class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);">
+                <div class="filters" style="display:flex; gap: 10px;">
+                    <select id="filtro-actividad" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${optionsHtml}
+                    </select>
+                    <select id="filtro-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                        ${turnosHtml}
                     </select>
                 </div>
             </div>
@@ -80,6 +97,23 @@ window.ViewTurnos = {
         `;
     },
 
+    aplicarFiltros() {
+        this.filtroActividad = document.getElementById('filtro-actividad').value;
+        this.filtroTurno = document.getElementById('filtro-turno').value;
+        this.renderTabContent();
+    },
+
+    getAnotados(horarioBaseId) {
+        if (!this.reservasData || !this.reservasData.id) return 0;
+        let count = 0;
+        for (let i = 0; i < this.reservasData.id.length; i++) {
+            if (this.reservasData.horario_base_id && this.reservasData.horario_base_id[i] === horarioBaseId) {
+                count++;
+            }
+        }
+        return count;
+    },
+
     renderClasesDia(dia, horarios, actividades) {
         if(!horarios || !horarios.dia_semana) return '';
         
@@ -87,23 +121,39 @@ window.ViewTurnos = {
         for(let i=0; i < horarios.id.length; i++) {
             if (horarios.dia_semana[i] === dia) {
                 const actId = horarios.actividad_id[i];
+                const horaInicio = horarios.hora_inicio[i];
+                
+                if (this.filtroActividad && actId.toString() !== this.filtroActividad) continue;
+
+                if (this.filtroTurno && horaInicio) {
+                    const hora = parseInt(horaInicio.split(':')[0]);
+                    if (this.filtroTurno === 'mañana' && hora >= 12) continue;
+                    if (this.filtroTurno === 'tarde' && (hora < 12 || hora >= 18)) continue;
+                    if (this.filtroTurno === 'noche' && hora < 18) continue;
+                }
+
                 let actName = "Desc.";
                 let color = "var(--primary)";
+                let cupoMax = 0;
                 
                 if (actividades && actividades.id) {
                     const actIndex = actividades.id.indexOf(actId);
                     if (actIndex !== -1) {
                         actName = actividades.nombre_actividad[actIndex];
                         color = actividades.color_ui[actIndex] || color;
+                        cupoMax = actividades.cupo_maximo[actIndex] || 0;
                     }
                 }
 
+                const anotados = this.getAnotados(horarios.id[i]);
+                const cupoBadge = cupoMax > 0 ? `${anotados}/${cupoMax}` : `${anotados}`;
+
                 clasesHtml += `
-                    <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;">
+                    <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${horarios.id[i]}, '${actName}', '${dia} ${horaInicio}')">
                         <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${horarios.hora_inicio[i]} - ${horarios.hora_fin[i]}</div>
                         <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: N/A</span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
                             <i class="ph ph-users" style="color: var(--text-muted);"></i>
                         </div>
                     </div>
@@ -365,6 +415,115 @@ window.ViewTurnos = {
             this.openHorariosModal(actIndex); // Refresh modal
         } catch (e) {
             alert("Error al eliminar horario.");
+        }
+    },
+
+    async openGestionClaseModal(horarioBaseId, actName, horarioLabel) {
+        // Enrolled students list
+        let enrolledHtml = '';
+        if (this.reservasData && this.reservasData.id) {
+            let enrolled = [];
+            for (let i = 0; i < this.reservasData.id.length; i++) {
+                if (this.reservasData.horario_base_id[i] === horarioBaseId) {
+                    const alumnoId = this.reservasData.alumno_id[i];
+                    let alumnoName = 'Desconocido';
+                    if (this.alumnosData && this.alumnosData.id) {
+                        const aIdx = this.alumnosData.id.indexOf(alumnoId);
+                        if (aIdx !== -1) {
+                            alumnoName = `${this.alumnosData.apellido[aIdx]}, ${this.alumnosData.nombre[aIdx]}`;
+                        }
+                    }
+                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName });
+                }
+            }
+
+            if (enrolled.length > 0) {
+                enrolledHtml = `
+                    <ul style="list-style:none; padding:0; margin:0 0 20px 0; font-size:13px;">
+                        ${enrolled.map(en => `
+                            <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
+                                <span><i class="ph ph-user"></i> ${en.name}</span>
+                                <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
+                            </li>
+                        `).join('')}
+                    </ul>
+                `;
+            } else {
+                enrolledHtml = '<p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">No hay alumnos anotados.</p>';
+            }
+        }
+
+        // Available students combo box
+        let alumnosOptions = '<option value="">Seleccionar Alumno...</option>';
+        if (this.alumnosData && this.alumnosData.id) {
+            this.alumnosData.id.forEach((aid, i) => {
+                // Filtramos por estado 'Activo'
+                if (this.alumnosData.estado[i] !== 'Inactivo') {
+                    alumnosOptions += `<option value="${aid}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                }
+            });
+        }
+
+        const formHtml = `
+            <div style="margin-bottom: 20px;">
+                <h4 style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid var(--border);">Anotados</h4>
+                ${enrolledHtml}
+            </div>
+            
+            <div class="form-group">
+                <label>Anotar Nuevo Alumno</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="modal-select-alumno" class="form-control" style="flex:1;">
+                        ${alumnosOptions}
+                    </select>
+                    <button class="btn btn-primary" id="btn-anotar-alumno">Anotar</button>
+                </div>
+            </div>
+        `;
+
+        const footerHtml = `
+            <button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>
+        `;
+
+        window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
+
+        document.getElementById('btn-anotar-alumno').addEventListener('click', async () => {
+            const alumnoId = parseInt(document.getElementById('modal-select-alumno').value);
+            if (!alumnoId) {
+                alert("Seleccione un alumno");
+                return;
+            }
+            
+            const btn = document.getElementById('btn-anotar-alumno');
+            try {
+                btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
+                btn.disabled = true;
+                
+                await GristData.addRecord('Turnos_Alumnos', {
+                    horario_base_id: horarioBaseId,
+                    alumno_id: alumnoId,
+                    estado: 'Confirmado'
+                });
+                
+                await this.render(); 
+                this.openGestionClaseModal(horarioBaseId, actName, horarioLabel);
+                
+            } catch (error) {
+                alert('Error al anotar alumno');
+                btn.innerHTML = 'Anotar';
+                btn.disabled = false;
+            }
+        });
+    },
+
+    async bajarAlumno(reservaId, horarioBaseId, actName, horarioLabel) {
+        if(!confirm("¿Dar de baja a este alumno de la clase?")) return;
+        try {
+            await GristData.deleteRecord('Turnos_Alumnos', reservaId);
+            await this.render();
+            this.openGestionClaseModal(horarioBaseId, actName, horarioLabel);
+        } catch(e) {
+            alert('Error al eliminar alumno');
         }
     }
 };
