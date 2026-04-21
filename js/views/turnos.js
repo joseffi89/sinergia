@@ -11,21 +11,27 @@ window.ViewTurnos = {
 
     async render() {
         const container = document.getElementById('turnos-container');
-        if (this.actividadesData) {
-            this.renderTabContent(); // Render immediately with cached data
-        } else {
-            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
-        }
+
+        // Siempre mostrar el shell inmediatamente (con datos cacheados o vacíos)
+        this.renderTabContent();
 
         try {
-            // Update data in background
-            this.actividadesData = await GristData.getTable('Actividades');
-            this.horariosData = await GristData.getTable('Horarios_Base');
-            try { this.reservasData = await GristData.getTable('Turnos_Alumnos'); } catch (e) { this.reservasData = { id: [] }; }
-            try { this.alumnosData = await GristData.getTable('Alumnos'); } catch (e) { this.alumnosData = { id: [] }; }
-            try { this.planesData = await GristData.getTable('Planes'); } catch (e) { this.planesData = { id: [] }; }
+            // Cargar todas las tablas EN PARALELO para minimizar el tiempo de espera
+            const [actividades, horarios, reservas, alumnos, planes] = await Promise.all([
+                GristData.getTable('Actividades').catch(() => ({ id: [] })),
+                GristData.getTable('Horarios_Base').catch(() => ({ id: [] })),
+                GristData.getTable('Turnos_Alumnos').catch(() => ({ id: [] })),
+                GristData.getTable('Alumnos').catch(() => ({ id: [] })),
+                GristData.getTable('Planes').catch(() => ({ id: [] }))
+            ]);
 
-            if (!this.actividadesData || !this.horariosData) {
+            this.actividadesData = actividades;
+            this.horariosData = horarios;
+            this.reservasData = reservas;
+            this.alumnosData = alumnos;
+            this.planesData = planes;
+
+            if (!this.actividadesData || !this.actividadesData.id) {
                 container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
                 return;
             }
@@ -33,7 +39,9 @@ window.ViewTurnos = {
             this.renderTabContent();
         } catch (e) {
             console.error(e);
-            container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando turnos.</p>';
+            if (!this.actividadesData) {
+                container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando turnos.</p>';
+            }
         }
     },
 
@@ -55,6 +63,11 @@ window.ViewTurnos = {
     renderTabContent() {
         const container = document.getElementById('turnos-container');
         if (this.currentTab === 'tab-calendario') {
+            if (!this.actividadesData) {
+                // Sin datos aún: mostrar cabecera estática + spinner solo en la grilla
+                container.innerHTML = this.getCalendarioHtml();
+                return;
+            }
             const existingHeader = document.querySelector('.calendar-header');
             if (existingHeader) {
                 const gridContainer = document.querySelector('.calendar-grid');
@@ -75,6 +88,16 @@ window.ViewTurnos = {
     getCalendarioGridHtml() {
         const actividades = this.actividadesData;
         const horarios = this.horariosData;
+        if (!actividades || !actividades.id) {
+            return `<div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
+                ${['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'].map(dia => `
+                    <div class="calendar-col">
+                        <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;">${dia}</h3>
+                        <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;"><i class="ph ph-spinner ph-spin"></i></div>
+                    </div>
+                `).join('')}
+            </div>`;
+        }
         return `
             <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
                 ${['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'].map(dia => `
