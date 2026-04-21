@@ -3,7 +3,9 @@ window.ViewAlumnos = {
     planesMap: {},
     async render() {
         const container = document.getElementById('alumnos-container');
-        container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando alumnos...</p>';
+        if (!this.currentData) {
+            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando alumnos...</p>';
+        }
 
         try {
             const alumnos = await GristData.getTable('Alumnos');

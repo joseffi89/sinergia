@@ -10,7 +10,9 @@ window.ViewTurnos = {
 
     async render() {
         const container = document.getElementById('turnos-container');
-        container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
+        if (!this.actividadesData) {
+            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
+        }
 
         try {
             // Obtener datos
@@ -51,8 +53,11 @@ window.ViewTurnos = {
         const container = document.getElementById('turnos-container');
         if (this.currentTab === 'tab-calendario') {
             container.innerHTML = this.getCalendarioHtml();
-        } else {
+        } else if (this.currentTab === 'tab-actividades') {
             container.innerHTML = this.getActividadesHtml();
+        } else if (this.currentTab === 'tab-pagos') {
+            container.innerHTML = this.getPagosHtml();
+            this.setupPagosEvents();
         }
     },
 
@@ -75,15 +80,12 @@ window.ViewTurnos = {
             <option value="noche" ${this.filtroTurno === 'noche' ? 'selected' : ''}>Noche (desde 18:00)</option>
         `;
 
-        let alumnosOptionsHtml = '<option value="">Todos los Alumnos</option>';
-        if (this.alumnosData && this.alumnosData.id) {
-            this.alumnosData.id.forEach((aid, i) => {
-                if (this.alumnosData.estado[i] !== 'Inactivo') {
-                    const selected = (this.filtroAlumnoTurno == aid) ? 'selected' : '';
-                    alumnosOptionsHtml += `<option value="${aid}" ${selected}>${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
-                }
-            });
-        }
+        const searchInputHtml = `
+            <div style="position:relative; width: 100%; max-width: 250px;">
+                <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 30px;">
+            </div>
+        `;
 
         return `
             <div class="calendar-header" style="display:flex; justify-content:space-between; margin-bottom: 20px;">
@@ -94,9 +96,7 @@ window.ViewTurnos = {
                     <select id="filtro-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${turnosHtml}
                     </select>
-                    <select id="filtro-alumno-turno" class="form-control" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
-                        ${alumnosOptionsHtml}
-                    </select>
+                    ${searchInputHtml}
                 </div>
             </div>
             <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
@@ -170,11 +170,22 @@ window.ViewTurnos = {
 
             if (this.filtroAlumnoTurno) {
                 let isEnrolled = false;
+                const searchTerm = this.filtroAlumnoTurno.toLowerCase();
                 if (this.reservasData && this.reservasData.id) {
                     for (let j=0; j < this.reservasData.id.length; j++) {
-                        if (this.reservasData.horario_base_id[j] === c.id && this.reservasData.alumno_id[j].toString() === this.filtroAlumnoTurno) {
-                            isEnrolled = true;
-                            break;
+                        if (this.reservasData.horario_base_id[j] === c.id) {
+                            const alumnoId = this.reservasData.alumno_id[j];
+                            if (this.alumnosData && this.alumnosData.id) {
+                                const idx = this.alumnosData.id.indexOf(alumnoId);
+                                if (idx !== -1) {
+                                    const nom = (this.alumnosData.nombre[idx] || '').toLowerCase();
+                                    const ape = (this.alumnosData.apellido[idx] || '').toLowerCase();
+                                    if (nom.includes(searchTerm) || ape.includes(searchTerm)) {
+                                        isEnrolled = true;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -641,6 +652,110 @@ window.ViewTurnos = {
             this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
         } catch(e) {
             alert('Error al eliminar alumno');
+        }
+    },
+
+    getPagosHtml() {
+        let options = '<option value="">Seleccione un alumno...</option>';
+        if (this.alumnosData && this.alumnosData.id) {
+            this.alumnosData.id.forEach((aid, i) => {
+                if (this.alumnosData.estado[i] !== 'Inactivo') {
+                    const planId = this.alumnosData.plan_id ? this.alumnosData.plan_id[i] : null;
+                    let importePlan = 0;
+                    if (planId && this.planesData && this.planesData.id) {
+                        const planIdx = this.planesData.id.indexOf(planId);
+                        if (planIdx !== -1) {
+                            importePlan = this.planesData.importe[planIdx] || 0;
+                        }
+                    }
+                    options += `<option value="${aid}" data-importe="${importePlan}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                }
+            });
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        return `
+            <div class="card" style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h3 style="margin-bottom: 20px; font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">Registrar Pago</h3>
+                
+                <div class="form-group">
+                    <label>Alumno</label>
+                    <select id="pago-alumno" class="form-control">
+                        ${options}
+                    </select>
+                </div>
+
+                <div style="display:flex; gap:15px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Fecha de Pago</label>
+                        <input type="date" id="pago-fecha" class="form-control" value="${today}">
+                    </div>
+                    
+                    <div class="form-group" style="flex:1;">
+                        <label>Importe a Cobrar ($)</label>
+                        <input type="number" id="pago-importe" class="form-control" value="0" step="0.01">
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; text-align: right;">
+                    <button class="btn btn-primary" id="btn-guardar-pago"><i class="ph ph-check"></i> Confirmar Pago</button>
+                </div>
+            </div>
+        `;
+    },
+
+    setupPagosEvents() {
+        const selectAlumno = document.getElementById('pago-alumno');
+        const inputImporte = document.getElementById('pago-importe');
+        const btnGuardar = document.getElementById('btn-guardar-pago');
+
+        if(selectAlumno) {
+            selectAlumno.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if(selectedOption && selectedOption.value !== "") {
+                    const importe = selectedOption.getAttribute('data-importe');
+                    inputImporte.value = importe;
+                } else {
+                    inputImporte.value = 0;
+                }
+            });
+        }
+
+        if(btnGuardar) {
+            btnGuardar.addEventListener('click', async () => {
+                const alumnoId = parseInt(selectAlumno.value);
+                const fecha = document.getElementById('pago-fecha').value;
+                const importe = parseFloat(inputImporte.value);
+
+                if(!alumnoId) { alert("Debe seleccionar un alumno."); return; }
+                if(!fecha) { alert("Debe seleccionar una fecha."); return; }
+                if(isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
+
+                try {
+                    btnGuardar.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Registrando...';
+                    btnGuardar.disabled = true;
+
+                    await GristData.addRecord('Pagos', {
+                        alumno_id: alumnoId,
+                        fecha: fecha,
+                        monto_pagado: importe
+                    });
+
+                    alert("Pago registrado con éxito.");
+                    
+                    selectAlumno.value = "";
+                    inputImporte.value = 0;
+                    document.getElementById('pago-fecha').value = new Date().toISOString().split('T')[0];
+
+                } catch(error) {
+                    console.error("Error al registrar pago:", error);
+                    alert("Ocurrió un error al registrar el pago.");
+                } finally {
+                    btnGuardar.innerHTML = '<i class="ph ph-check"></i> Confirmar Pago';
+                    btnGuardar.disabled = false;
+                }
+            });
         }
     }
 };
