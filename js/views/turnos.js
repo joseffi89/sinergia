@@ -17,6 +17,7 @@ window.ViewTurnos = {
             this.horariosData = await GristData.getTable('Horarios_Base');
             try { this.reservasData = await GristData.getTable('Turnos_Alumnos'); } catch(e) { this.reservasData = { id: [] }; }
             try { this.alumnosData = await GristData.getTable('Alumnos'); } catch(e) { this.alumnosData = { id: [] }; }
+            try { this.planesData = await GristData.getTable('Planes'); } catch(e) { this.planesData = { id: [] }; }
             
             if (!this.actividadesData || !this.horariosData) {
                 container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
@@ -108,7 +109,10 @@ window.ViewTurnos = {
         let count = 0;
         for (let i = 0; i < this.reservasData.id.length; i++) {
             if (this.reservasData.horario_base_id && this.reservasData.horario_base_id[i] === horarioBaseId) {
-                count++;
+                const tipo = this.reservasData.tipo_reserva ? this.reservasData.tipo_reserva[i] : 'Regular';
+                if (tipo !== 'Recuperación' && tipo !== 'Excepción') {
+                    count++;
+                }
             }
         }
         return count;
@@ -149,11 +153,11 @@ window.ViewTurnos = {
                 const cupoBadge = cupoMax > 0 ? `${anotados}/${cupoMax}` : `${anotados}`;
 
                 clasesHtml += `
-                    <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${horarios.id[i]}, '${actName}', '${dia} ${horaInicio}')">
+                    <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${horarios.id[i]}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
                         <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"><i class="ph ph-clock"></i> ${horarios.hora_inicio[i]} - ${horarios.hora_fin[i]}</div>
                         <div style="font-weight: 500; font-size: 14px; margin-bottom: 8px;">${actName}</div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos Regulares: ${cupoBadge}</span>
                             <i class="ph ph-users" style="color: var(--text-muted);"></i>
                         </div>
                     </div>
@@ -418,7 +422,7 @@ window.ViewTurnos = {
         }
     },
 
-    async openGestionClaseModal(horarioBaseId, actName, horarioLabel) {
+    async openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel) {
         // Enrolled students list
         let enrolledHtml = '';
         if (this.reservasData && this.reservasData.id) {
@@ -456,7 +460,7 @@ window.ViewTurnos = {
                         ${enrolled.map(en => `
                             <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
                                 <span><i class="ph ph-user"></i> ${en.name} ${en.badge}</span>
-                                <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
+                                <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, ${actId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
                             </li>
                         `).join('')}
                     </ul>
@@ -466,16 +470,35 @@ window.ViewTurnos = {
             }
         }
 
-        // Available students combo box
-        let alumnosOptions = '<option value="">Seleccionar Alumno...</option>';
+        // Available students combo box with grouping
+        let habilitadosHtml = '';
+        let otrosHtml = '';
         if (this.alumnosData && this.alumnosData.id) {
             this.alumnosData.id.forEach((aid, i) => {
-                // Filtramos por estado 'Activo'
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
-                    alumnosOptions += `<option value="${aid}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                    const planId = this.alumnosData.plan_id ? this.alumnosData.plan_id[i] : null;
+                    let allowed = false;
+                    
+                    if (planId && this.planesData && this.planesData.id) {
+                        const planIdx = this.planesData.id.indexOf(planId);
+                        if (planIdx !== -1) {
+                            const actPermitidas = this.planesData.actividades_permitidas ? this.planesData.actividades_permitidas[planIdx] : null;
+                            if (Array.isArray(actPermitidas) && actPermitidas[0] === 'L') {
+                                allowed = actPermitidas.includes(actId);
+                            }
+                        }
+                    }
+
+                    const opt = `<option value="${aid}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                    if (allowed) habilitadosHtml += opt;
+                    else otrosHtml += opt;
                 }
             });
         }
+        
+        let alumnosOptions = '<option value="">Seleccionar Alumno...</option>';
+        if (habilitadosHtml) alumnosOptions += `<optgroup label="Habilitados por su Plan">${habilitadosHtml}</optgroup>`;
+        if (otrosHtml) alumnosOptions += `<optgroup label="No habilitados (Para Excepciones)">${otrosHtml}</optgroup>`;
 
         const formHtml = `
             <div style="margin-bottom: 20px;">
@@ -525,7 +548,7 @@ window.ViewTurnos = {
                 });
                 
                 await this.render(); 
-                this.openGestionClaseModal(horarioBaseId, actName, horarioLabel);
+                this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
                 
             } catch (error) {
                 console.error("Error Grist:", error);
@@ -536,12 +559,12 @@ window.ViewTurnos = {
         });
     },
 
-    async bajarAlumno(reservaId, horarioBaseId, actName, horarioLabel) {
+    async bajarAlumno(reservaId, horarioBaseId, actId, actName, horarioLabel) {
         if(!confirm("¿Dar de baja a este alumno de la clase?")) return;
         try {
             await GristData.deleteRecord('Turnos_Alumnos', reservaId);
             await this.render();
-            this.openGestionClaseModal(horarioBaseId, actName, horarioLabel);
+            this.openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel);
         } catch(e) {
             alert('Error al eliminar alumno');
         }
