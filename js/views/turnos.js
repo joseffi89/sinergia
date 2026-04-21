@@ -686,12 +686,17 @@ window.ViewTurnos = {
                     </select>
                 </div>
 
-                <div style="display:flex; gap:15px;">
+                <div style="display:flex; gap:15px; margin-top: 15px;">
                     <div class="form-group" style="flex:1;">
                         <label>Fecha de Pago</label>
                         <input type="date" id="pago-fecha" class="form-control" value="${today}">
                     </div>
                     
+                    <div class="form-group" style="flex:1;">
+                        <label>Mes Correspondiente</label>
+                        <input type="month" id="pago-mes" class="form-control" value="${today.substring(0, 7)}">
+                    </div>
+
                     <div class="form-group" style="flex:1;">
                         <label>Importe a Cobrar ($)</label>
                         <input type="number" id="pago-importe" class="form-control" value="0" step="0.01">
@@ -726,10 +731,12 @@ window.ViewTurnos = {
             btnGuardar.addEventListener('click', async () => {
                 const alumnoId = parseInt(selectAlumno.value);
                 const fecha = document.getElementById('pago-fecha').value;
+                const mesCorrespondiente = document.getElementById('pago-mes').value;
                 const importe = parseFloat(inputImporte.value);
 
                 if(!alumnoId) { alert("Debe seleccionar un alumno."); return; }
                 if(!fecha) { alert("Debe seleccionar una fecha."); return; }
+                if(!mesCorrespondiente) { alert("Debe indicar a qué mes corresponde este pago."); return; }
                 if(isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
 
                 try {
@@ -739,6 +746,7 @@ window.ViewTurnos = {
                     await GristData.addRecord('Pagos', {
                         alumno_id: alumnoId,
                         fecha: fecha,
+                        mes_correspondiente: mesCorrespondiente,
                         monto_pagado: importe
                     });
 
