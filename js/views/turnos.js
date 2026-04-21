@@ -130,6 +130,7 @@ window.ViewTurnos = {
                         </td>
                         <td style="padding: 12px;">${cupo}</td>
                         <td style="padding: 12px; text-align: right;">
+                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 13px;" onclick="window.ViewTurnos.openHorariosModal(${i})"><i class="ph ph-clock"></i> Horarios</button>
                             <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 13px;" onclick="window.ViewTurnos.openActividadModal(${i})"><i class="ph ph-pencil-simple"></i> Editar</button>
                         </td>
                     </tr>
