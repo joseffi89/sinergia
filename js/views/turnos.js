@@ -42,10 +42,8 @@ window.ViewTurnos = {
     renderTabContent() {
         const container = document.getElementById('turnos-container');
         if (this.currentTab === 'tab-calendario') {
-            document.getElementById('btn-nueva-clase').style.display = 'inline-flex';
             container.innerHTML = this.getCalendarioHtml();
         } else {
-            document.getElementById('btn-nueva-clase').style.display = 'none';
             container.innerHTML = this.getActividadesHtml();
         }
     },
