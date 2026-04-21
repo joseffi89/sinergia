@@ -521,15 +521,15 @@ window.ViewTurnos = {
                 await GristData.addRecord('Turnos_Alumnos', {
                     horario_base_id: horarioBaseId,
                     alumno_id: alumnoId,
-                    tipo_reserva: tipoReserva,
-                    estado: 'Confirmado'
+                    tipo_reserva: tipoReserva
                 });
                 
                 await this.render(); 
                 this.openGestionClaseModal(horarioBaseId, actName, horarioLabel);
                 
             } catch (error) {
-                alert('Error al anotar alumno');
+                console.error("Error Grist:", error);
+                alert('Error al anotar alumno: ' + (error.message || 'Verifica la consola'));
                 btn.innerHTML = 'Anotar';
                 btn.disabled = false;
             }
