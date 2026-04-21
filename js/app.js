@@ -56,10 +56,6 @@ const App = {
                         <input type="email" id="al-email" class="form-control" placeholder="Ej. juan@ejemplo.com">
                     </div>
                     <div class="form-group">
-                        <label>Teléfono</label>
-                        <input type="text" id="al-telefono" class="form-control" placeholder="Ej. 1122334455">
-                    </div>
-                    <div class="form-group">
                         <label>Fecha de Ingreso</label>
                         <input type="date" id="al-fecha-ingreso" class="form-control" value="${hoy}">
                     </div>
@@ -81,7 +77,6 @@ const App = {
                         apellido: document.getElementById('al-apellido').value,
                         dni: document.getElementById('al-dni').value,
                         email: document.getElementById('al-email').value,
-                        telefono: document.getElementById('al-telefono').value,
                         fecha_ingreso: document.getElementById('al-fecha-ingreso').value, // Formato YYYY-MM-DD compatible con Date
                         plan_id: parseInt(document.getElementById('al-plan').value) || null,
                         estado: 'Activo'

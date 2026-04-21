@@ -1,10 +1,13 @@
 window.ViewAlumnos = {
+    currentData: null,
+    planesMap: {},
     async render() {
         const container = document.getElementById('alumnos-container');
         container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando alumnos...</p>';
 
         try {
             const alumnos = await GristData.getTable('Alumnos');
+            this.currentData = alumnos;
             const planes = await GristData.getTable('Planes');
             
             if (!alumnos) {
@@ -29,16 +32,14 @@ window.ViewAlumnos = {
                     const estadoColor = estado === 'Activo' ? 'var(--success)' : 'var(--danger)';
                     const apellido = alumnos.apellido ? alumnos.apellido[i] : '-';
                     const nombre = alumnos.nombre ? alumnos.nombre[i] : '-';
-                    const telefono = alumnos.telefono ? alumnos.telefono[i] : '-';
                     
                     rows += `
                         <tr style="border-bottom: 1px solid var(--border);">
                             <td style="padding: 12px; font-weight: 500;">${apellido}, ${nombre}</td>
-                            <td style="padding: 12px; color: var(--text-muted);">${telefono}</td>
                             <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
                             <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
                             <td style="padding: 12px; text-align: right;">
-                                <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;"><i class="ph ph-pencil-simple"></i></button>
+                                <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;" onclick="window.ViewAlumnos.openEditModal(${i})"><i class="ph ph-pencil-simple"></i></button>
                             </td>
                         </tr>
                     `;
@@ -53,7 +54,6 @@ window.ViewAlumnos = {
                         <thead>
                             <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 13px; text-transform: uppercase;">
                                 <th style="padding: 12px;">Alumno</th>
-                                <th style="padding: 12px;">Teléfono</th>
                                 <th style="padding: 12px;">Plan</th>
                                 <th style="padding: 12px;">Estado</th>
                                 <th style="padding: 12px; text-align:right;">Acciones</th>
@@ -72,5 +72,95 @@ window.ViewAlumnos = {
             console.error(error);
             container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando alumnos.</p>';
         }
+    },
+
+    async openEditModal(index) {
+        const alumnos = this.currentData;
+        if (!alumnos || !alumnos.id) return;
+        
+        const id = alumnos.id[index];
+        const nombre = alumnos.nombre ? alumnos.nombre[index] : '';
+        const apellido = alumnos.apellido ? alumnos.apellido[index] : '';
+        const dni = alumnos.dni ? alumnos.dni[index] : '';
+        const email = alumnos.email ? alumnos.email[index] : '';
+        const fecha_ingreso = alumnos.fecha_ingreso ? alumnos.fecha_ingreso[index] : '';
+        const plan_id = alumnos.plan_id ? alumnos.plan_id[index] : '';
+        const estado = alumnos.estado ? alumnos.estado[index] : 'Activo';
+
+        let options = '<option value="">Seleccionar...</option>';
+        try {
+            const planes = await GristData.getTable('Planes');
+            if(planes && planes.id) {
+                planes.id.forEach((pid, i) => {
+                    const selected = pid === plan_id ? 'selected' : '';
+                    options += `<option value="${pid}" ${selected}>${planes.nombre_plan[i]}</option>`;
+                });
+            }
+        } catch(e) {}
+
+        const formHtml = `
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" id="edit-al-nombre" class="form-control" value="${nombre}">
+            </div>
+            <div class="form-group">
+                <label>Apellido</label>
+                <input type="text" id="edit-al-apellido" class="form-control" value="${apellido}">
+            </div>
+            <div class="form-group">
+                <label>DNI</label>
+                <input type="text" id="edit-al-dni" class="form-control" value="${dni}">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="edit-al-email" class="form-control" value="${email}">
+            </div>
+            <div class="form-group">
+                <label>Fecha de Ingreso</label>
+                <input type="date" id="edit-al-fecha" class="form-control" value="${fecha_ingreso}">
+            </div>
+            <div class="form-group">
+                <label>Plan</label>
+                <select id="edit-al-plan" class="form-control">${options}</select>
+            </div>
+            <div class="form-group">
+                <label>Estado</label>
+                <select id="edit-al-estado" class="form-control">
+                    <option value="Activo" ${estado === 'Activo' ? 'selected' : ''}>Activo</option>
+                    <option value="Inactivo" ${estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+                </select>
+            </div>
+        `;
+
+        const footerHtml = `
+            <button class="btn btn-secondary" onclick="window.Modal.close()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-update-al">Actualizar</button>
+        `;
+
+        window.Modal.show('Editar Alumno', formHtml, footerHtml);
+
+        document.getElementById('btn-update-al').addEventListener('click', async () => {
+            const data = {
+                nombre: document.getElementById('edit-al-nombre').value,
+                apellido: document.getElementById('edit-al-apellido').value,
+                dni: document.getElementById('edit-al-dni').value,
+                email: document.getElementById('edit-al-email').value,
+                fecha_ingreso: document.getElementById('edit-al-fecha').value,
+                plan_id: parseInt(document.getElementById('edit-al-plan').value) || null,
+                estado: document.getElementById('edit-al-estado').value
+            };
+            const btn = document.getElementById('btn-update-al');
+            try {
+                btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
+                btn.disabled = true;
+                await GristData.updateRecord('Alumnos', id, data);
+                window.Modal.close();
+                this.render(); // Refrescar lista
+            } catch (e) {
+                alert('Error al actualizar el alumno');
+                btn.innerHTML = 'Actualizar';
+                btn.disabled = false;
+            }
+        });
     }
 };
