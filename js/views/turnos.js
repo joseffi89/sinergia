@@ -298,9 +298,9 @@ window.ViewTurnos = {
             if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
 
             const cupoLleno = cupoMax > 0 && info.regulares >= cupoMax;
-            const cupoLlenoTag = cupoLleno
-                ? `<span style="font-size:10px; font-weight:600; color:#e8924a; background:rgba(232,146,74,0.15); border:1px solid rgba(232,146,74,0.35); padding:2px 6px; border-radius:4px; margin-left:6px;">Cupo lleno</span>`
-                : '';
+            const cupoBadgeStyle = cupoLleno
+                ? 'color:#e8924a; background:rgba(232,146,74,0.15); border:1px solid rgba(232,146,74,0.35);'
+                : 'background: rgba(255,255,255,0.1);';
 
             clasesHtml += `
                 <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
@@ -311,10 +311,7 @@ window.ViewTurnos = {
                     <div style="font-weight: 500; font-size: 14px; margin-bottom: 2px;">${actName}</div>
                     ${c.ubicacion ? `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="display:flex; align-items:center;">
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Cupos: ${cupoBadge}</span>
-                            ${cupoLlenoTag}
-                        </div>
+                        <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; ${cupoBadgeStyle}">Cupos: ${cupoBadge}</span>
                         <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
                     </div>
                 </div>
