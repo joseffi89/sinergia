@@ -616,7 +616,9 @@ window.ViewTurnos = {
                     if (this.alumnosData && this.alumnosData.id) {
                         const aIdx = this.alumnosData.id.indexOf(alumnoId);
                         if (aIdx !== -1) {
-                            alumnoName = `${this.alumnosData.apellido[aIdx]}, ${this.alumnosData.nombre[aIdx]}`;
+                            alumnoName = this.alumnosData.Apellido_y_Nombre
+                                ? (this.alumnosData.Apellido_y_Nombre[aIdx] || 'Desconocido')
+                                : `${this.alumnosData.apellido[aIdx]}, ${this.alumnosData.nombre[aIdx]}`;
                         }
                     }
 
@@ -655,15 +657,19 @@ window.ViewTurnos = {
             }
         }
 
-        // Available students combo box with grouping
-        let habilitadosHtml = '<option value="">Seleccionar Alumno...</option>';
-        let todosHtml = '<option value="">Seleccionar Alumno...</option>';
+        // Available students combo box — sorted alphabetically by Apellido_y_Nombre
+        let habilitadosOpts = [];
+        let todosOpts = [];
         if (this.alumnosData && this.alumnosData.id) {
+            // Build list first, then sort
             this.alumnosData.id.forEach((aid, i) => {
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
                     const planId = this.alumnosData.plan_id ? this.alumnosData.plan_id[i] : null;
-                    let allowed = false;
+                    const displayName = this.alumnosData.Apellido_y_Nombre
+                        ? (this.alumnosData.Apellido_y_Nombre[i] || `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`)
+                        : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
 
+                    let allowed = false;
                     if (planId && this.planesData && this.planesData.id) {
                         const planIdx = this.planesData.id.indexOf(planId);
                         if (planIdx !== -1) {
@@ -674,12 +680,20 @@ window.ViewTurnos = {
                         }
                     }
 
-                    const opt = `<option value="${aid}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
-                    if (allowed) habilitadosHtml += opt;
-                    todosHtml += opt;
+                    todosOpts.push({ aid, displayName });
+                    if (allowed) habilitadosOpts.push({ aid, displayName });
                 }
             });
         }
+
+        // Sort alphabetically
+        habilitadosOpts.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        todosOpts.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        let habilitadosHtml = '<option value="">Seleccionar Alumno...</option>' +
+            habilitadosOpts.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
+        let todosHtml = '<option value="">Seleccionar Alumno...</option>' +
+            todosOpts.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
 
         const formHtml = `
             <div style="margin-bottom: 20px;">
@@ -780,7 +794,8 @@ window.ViewTurnos = {
     },
 
     getPagosHtml() {
-        let options = '<option value="">Seleccione un alumno...</option>';
+        // Build sorted list using Apellido_y_Nombre
+        let alumnosActivos = [];
         if (this.alumnosData && this.alumnosData.id) {
             this.alumnosData.id.forEach((aid, i) => {
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
@@ -788,14 +803,18 @@ window.ViewTurnos = {
                     let importePlan = 0;
                     if (planId && this.planesData && this.planesData.id) {
                         const planIdx = this.planesData.id.indexOf(planId);
-                        if (planIdx !== -1) {
-                            importePlan = this.planesData.importe[planIdx] || 0;
-                        }
+                        if (planIdx !== -1) importePlan = this.planesData.importe[planIdx] || 0;
                     }
-                    options += `<option value="${aid}" data-importe="${importePlan}">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</option>`;
+                    const displayName = this.alumnosData.Apellido_y_Nombre
+                        ? (this.alumnosData.Apellido_y_Nombre[i] || `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`)
+                        : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
+                    alumnosActivos.push({ aid, importePlan, displayName });
                 }
             });
         }
+        alumnosActivos.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        let options = '<option value="">Seleccione un alumno...</option>' +
+            alumnosActivos.map(a => `<option value="${a.aid}" data-importe="${a.importePlan}">${a.displayName}</option>`).join('');
 
         const today = new Date().toISOString().split('T')[0];
 

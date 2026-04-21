@@ -45,17 +45,24 @@ window.ViewAlumnos = {
 
         let rows = '';
         if (alumnos.id && alumnos.id.length > 0) {
-            for (let i = 0; i < alumnos.id.length; i++) {
+            // Ordenar por Apellido_y_Nombre alfabéticamente
+            const sortedIndices = alumnos.id.map((_, i) => i)
+                .sort((a, b) => {
+                    const na = alumnos.Apellido_y_Nombre ? (alumnos.Apellido_y_Nombre[a] || '') : '';
+                    const nb = alumnos.Apellido_y_Nombre ? (alumnos.Apellido_y_Nombre[b] || '') : '';
+                    return na.localeCompare(nb);
+                });
+
+            for (const i of sortedIndices) {
                 const planId = alumnos.plan_id ? alumnos.plan_id[i] : null;
                 const planName = this.planesMap[planId] || 'Sin Plan';
                 const estado = alumnos.estado ? alumnos.estado[i] : 'Activo';
                 const estadoColor = estado === 'Activo' ? 'var(--success)' : 'var(--danger)';
-                const apellido = alumnos.apellido ? alumnos.apellido[i] : '-';
-                const nombre = alumnos.nombre ? alumnos.nombre[i] : '-';
+                const displayName = alumnos.Apellido_y_Nombre ? alumnos.Apellido_y_Nombre[i] : `${alumnos.apellido[i]}, ${alumnos.nombre[i]}`;
 
                 rows += `
                     <tr style="border-bottom: 1px solid var(--border);">
-                        <td style="padding: 12px; font-weight: 500;">${apellido}, ${nombre}</td>
+                        <td style="padding: 12px; font-weight: 500;">${displayName}</td>
                         <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
                         <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
                         <td style="padding: 12px; text-align: right;">
