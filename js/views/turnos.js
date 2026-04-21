@@ -230,63 +230,142 @@ window.ViewTurnos = {
         });
     },
 
-    openNewHorarioModal() {
-        let options = '<option value="">Seleccionar...</option>';
-        if (this.actividadesData && this.actividadesData.id) {
-            this.actividadesData.id.forEach((aid, i) => {
-                options += `<option value="${aid}">${this.actividadesData.nombre_actividad[i]}</option>`;
-            });
+    async openHorariosModal(index) {
+        if(!this.actividadesData || !this.actividadesData.id) return;
+        const actId = this.actividadesData.id[index];
+        const actName = this.actividadesData.nombre_actividad[index];
+        
+        // Ensure we have fresh data for the modal
+        this.horariosData = await GristData.getTable('Horarios_Base');
+        
+        // Find existing schedules
+        let existingSchedules = [];
+        if (this.horariosData && this.horariosData.id) {
+            for(let i=0; i < this.horariosData.id.length; i++) {
+                if (this.horariosData.actividad_id[i] === actId) {
+                    existingSchedules.push({
+                        id: this.horariosData.id[i],
+                        dia: this.horariosData.dia_semana[i],
+                        inicio: this.horariosData.hora_inicio[i],
+                        fin: this.horariosData.hora_fin[i]
+                    });
+                }
+            }
         }
-        
+
+        // Sort schedules by day
+        const dayOrder = { 'Lunes':1, 'Martes':2, 'Miercoles':3, 'Jueves':4, 'Viernes':5, 'Sabado':6, 'Domingo':7 };
+        existingSchedules.sort((a,b) => (dayOrder[a.dia]||9) - (dayOrder[b.dia]||9));
+
+        let tableHtml = '';
+        if (existingSchedules.length > 0) {
+            tableHtml = `
+                <table style="width:100%; border-collapse:collapse; margin-bottom: 20px; font-size:13px;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border); color:var(--text-muted); text-align:left;">
+                            <th style="padding:8px;">Día</th>
+                            <th style="padding:8px;">Horario</th>
+                            <th style="padding:8px; text-align:right;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${existingSchedules.map(sch => `
+                            <tr style="border-bottom:1px solid var(--border);">
+                                <td style="padding:8px; font-weight:500;">${sch.dia}</td>
+                                <td style="padding:8px;">${sch.inicio} - ${sch.fin}</td>
+                                <td style="padding:8px; text-align:right;">
+                                    <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.deleteHorario(${sch.id}, ${index})"><i class="ph ph-trash"></i></button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        } else {
+            tableHtml = '<p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">No hay horarios configurados para esta actividad.</p>';
+        }
+
         const formHtml = `
-            <div class="form-group">
-                <label>Actividad</label>
-                <select id="horario-act" class="form-control">${options}</select>
-            </div>
-            <div class="form-group">
-                <label>Día de la Semana</label>
-                <select id="horario-dia" class="form-control">
-                    <option value="Lunes">Lunes</option>
-                    <option value="Martes">Martes</option>
-                    <option value="Miercoles">Miercoles</option>
-                    <option value="Jueves">Jueves</option>
-                    <option value="Viernes">Viernes</option>
-                    <option value="Sabado">Sabado</option>
-                </select>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <div class="form-group" style="flex:1;">
-                    <label>Hora Inicio</label>
-                    <input type="time" id="horario-inicio" class="form-control">
+            <div>
+                <h4 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;">Horarios Existentes</h4>
+                ${tableHtml}
+                
+                <h4 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:5px;">Agregar Horarios</h4>
+                <div class="form-group">
+                    <label>Días de la Semana</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:5px;">
+                        ${['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'].map(dia => `
+                            <label style="display:flex; align-items:center; gap:5px; background:var(--bg-dark); padding:5px 10px; border-radius:4px; border:1px solid var(--border); cursor:pointer; font-size:13px;">
+                                <input type="checkbox" name="horario_dias" value="${dia}"> ${dia}
+                            </label>
+                        `).join('')}
+                    </div>
                 </div>
-                <div class="form-group" style="flex:1;">
-                    <label>Hora Fin</label>
-                    <input type="time" id="horario-fin" class="form-control">
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Hora Inicio</label>
+                        <input type="time" id="bulk-inicio" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Hora Fin</label>
+                        <input type="time" id="bulk-fin" class="form-control">
+                    </div>
                 </div>
             </div>
         `;
-        
+
         const footerHtml = `
-            <button class="btn btn-secondary" onclick="window.Modal.close()">Cancelar</button>
-            <button class="btn btn-primary" id="btn-save-horario">Guardar Clase</button>
+            <button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>
+            <button class="btn btn-primary" id="btn-save-bulk">Agregar Horarios</button>
         `;
-        
-        window.Modal.show('Nueva Clase (Grilla Semanal)', formHtml, footerHtml);
-        
-        document.getElementById('btn-save-horario').addEventListener('click', async () => {
-            const data = {
-                actividad_id: parseInt(document.getElementById('horario-act').value) || null,
-                dia_semana: document.getElementById('horario-dia').value,
-                hora_inicio: document.getElementById('horario-inicio').value,
-                hora_fin: document.getElementById('horario-fin').value
-            };
+
+        window.Modal.show(`Horarios de ${actName}`, formHtml, footerHtml);
+
+        document.getElementById('btn-save-bulk').addEventListener('click', async () => {
+            const checkboxes = document.querySelectorAll('input[name="horario_dias"]:checked');
+            const diasSeleccionados = Array.from(checkboxes).map(cb => cb.value);
+            const hora_inicio = document.getElementById('bulk-inicio').value;
+            const hora_fin = document.getElementById('bulk-fin').value;
+
+            if (diasSeleccionados.length === 0) {
+                alert("Debes seleccionar al menos un día.");
+                return;
+            }
+            if (!hora_inicio || !hora_fin) {
+                alert("Debes especificar la hora de inicio y fin.");
+                return;
+            }
+
+            const dataArray = diasSeleccionados.map(dia => ({
+                actividad_id: actId,
+                dia_semana: dia,
+                hora_inicio: hora_inicio,
+                hora_fin: hora_fin
+            }));
+
+            const btn = document.getElementById('btn-save-bulk');
             try {
-                await GristData.addRecord('Horarios_Base', data);
-                window.Modal.close();
-                this.render();
+                btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
+                btn.disabled = true;
+                await GristData.addRecords('Horarios_Base', dataArray);
+                this.render(); // Refreshes the underlying view
+                this.openHorariosModal(index); // Re-opens this modal to see updated data
             } catch (e) {
-                alert('Error al guardar la clase');
+                alert('Error al agregar los horarios');
+                btn.innerHTML = 'Agregar Horarios';
+                btn.disabled = false;
             }
         });
+    },
+
+    async deleteHorario(horarioId, actIndex) {
+        if(!confirm("¿Seguro que deseas eliminar este horario?")) return;
+        try {
+            await GristData.deleteRecord('Horarios_Base', horarioId);
+            this.render(); // Refresh main view
+            this.openHorariosModal(actIndex); // Refresh modal
+        } catch (e) {
+            alert("Error al eliminar horario.");
+        }
     }
 };

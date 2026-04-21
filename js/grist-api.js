@@ -52,6 +52,16 @@ const GristData = {
         }
     },
 
+    async addRecords(tableName, dataArray) {
+        try {
+            const actions = dataArray.map(data => ['AddRecord', tableName, null, data]);
+            return await grist.docApi.applyUserActions(actions);
+        } catch (error) {
+            console.error(`Error al agregar registros en ${tableName}:`, error);
+            throw error;
+        }
+    },
+
     async updateRecord(tableName, id, data) {
         try {
             return await grist.docApi.applyUserActions([
@@ -70,6 +80,16 @@ const GristData = {
             ]);
         } catch (error) {
             console.error(`Error al eliminar registro ${id} en ${tableName}:`, error);
+            throw error;
+        }
+    },
+
+    async deleteRecords(tableName, idsArray) {
+        try {
+            const actions = idsArray.map(id => ['RemoveRecord', tableName, id]);
+            return await grist.docApi.applyUserActions(actions);
+        } catch (error) {
+            console.error(`Error al eliminar múltiples registros en ${tableName}:`, error);
             throw error;
         }
     }
