@@ -11,12 +11,80 @@ const App = {
         await GristData.init();
         
         this.setupNavigation();
+        this.setupActions();
         
-        // Mock User Role (Idealmente sacar de una tabla Users)
+        // Mock User Role
         document.getElementById('user-role').textContent = 'Admin';
         
-        // Cargar vista inicial
+        // Cargar vista inicial (Loader mientras se espera Grist)
         this.loadView(this.currentView);
+    },
+
+    setupActions() {
+        // Setup Modal "Nuevo Alumno"
+        const btnNuevoAlumno = document.getElementById('btn-nuevo-alumno');
+        if (btnNuevoAlumno) {
+            btnNuevoAlumno.addEventListener('click', async () => {
+                // Fetch planes for the dropdown
+                let options = '<option value="">Seleccionar...</option>';
+                try {
+                    const planes = await GristData.getTable('Planes');
+                    if(planes && planes.id) {
+                        planes.id.forEach((pid, i) => {
+                            options += `<option value="${pid}">${planes.nombre_plan[i]}</option>`;
+                        });
+                    }
+                } catch(e) {}
+
+                const formHtml = `
+                    <div class="form-group">
+                        <label>Nombre</label>
+                        <input type="text" id="al-nombre" class="form-control" placeholder="Ej. Juan">
+                    </div>
+                    <div class="form-group">
+                        <label>Apellido</label>
+                        <input type="text" id="al-apellido" class="form-control" placeholder="Ej. Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label>Plan</label>
+                        <select id="al-plan" class="form-control">${options}</select>
+                    </div>
+                `;
+                const footerHtml = `
+                    <button class="btn btn-secondary" id="btn-cancelar">Cancelar</button>
+                    <button class="btn btn-primary" id="btn-guardar-al">Guardar</button>
+                `;
+                window.Modal.show('Nuevo Alumno', formHtml, footerHtml);
+
+                document.getElementById('btn-cancelar').addEventListener('click', () => window.Modal.close());
+                document.getElementById('btn-guardar-al').addEventListener('click', async () => {
+                    const data = {
+                        nombre: document.getElementById('al-nombre').value,
+                        apellido: document.getElementById('al-apellido').value,
+                        plan_id: parseInt(document.getElementById('al-plan').value) || null,
+                        estado: 'Activo'
+                    };
+                    try {
+                        const btn = document.getElementById('btn-guardar-al');
+                        btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
+                        btn.disabled = true;
+                        await GristData.addRecord('Alumnos', data);
+                        window.Modal.close();
+                        this.loadView('alumnos'); // Refresh
+                    } catch (e) {
+                        alert('Error al guardar el alumno');
+                    }
+                });
+            });
+        }
+
+        // Setup Modal "Nueva Clase" (Demo)
+        const btnNuevaClase = document.getElementById('btn-nueva-clase');
+        if (btnNuevaClase) {
+            btnNuevaClase.addEventListener('click', () => {
+                window.Modal.show('Nueva Clase', '<p>Funcionalidad en desarrollo...</p>', '<button class="btn btn-primary" onclick="window.Modal.close()">Cerrar</button>');
+            });
+        }
     },
 
     setupNavigation() {

@@ -8,20 +8,36 @@ const GristData = {
             requiredAccess: 'full' // Necesitamos acceso full para ABM
         });
 
-        this.isReady = true;
-        console.log("Grist API conectada correctamente");
-        
-        // Intentar obtener info del usuario si Grist expone algo (opcional)
-        // Por ahora lo mockeamos según el requerimiento de tener rol Admin/Gestión
+        grist.onRecords(() => {
+            if(!this.isReady) {
+                this.isReady = true;
+                console.log("Grist API conectada y datos recibidos");
+                if (window.App && window.App.currentView) {
+                    window.App.loadView(window.App.currentView);
+                }
+            }
+        });
+
+        // Fallback timeout in case onRecords doesn't fire
+        setTimeout(() => {
+            if(!this.isReady) {
+                this.isReady = true;
+                console.log("Grist timeout alcanzado, forzando renderizado");
+                if (window.App && window.App.currentView) window.App.loadView(window.App.currentView);
+            }
+        }, 1500);
     },
 
     async getTable(tableName) {
-        if (!this.isReady) await this.init();
+        if (!this.isReady) return { id: [] }; // Mock empty if not ready
         try {
-            return await grist.docApi.fetchTable(tableName);
+            const data = await grist.docApi.fetchTable(tableName);
+            // Ensure data has .id to prevent errors
+            if (!data.id) data.id = [];
+            return data;
         } catch (error) {
             console.error(`Error al obtener tabla ${tableName}:`, error);
-            return null;
+            return { id: [] }; // Prevent crash on view
         }
     },
 
