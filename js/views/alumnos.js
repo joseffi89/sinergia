@@ -3,8 +3,16 @@ window.ViewAlumnos = {
     planesMap: {},
     async render() {
         const container = document.getElementById('alumnos-container');
-        
-        // Carga inmediata con caché
+
+        // Usar caché del prefetch global para pintar de inmediato
+        if (!this.currentData) {
+            this.currentData = GristData.getCached('Alumnos');
+            const cachedPlanes = GristData.getCached('Planes');
+            if (cachedPlanes && cachedPlanes.id) {
+                cachedPlanes.id.forEach((pid, i) => { this.planesMap[pid] = cachedPlanes.nombre_plan[i]; });
+            }
+        }
+
         if (this.currentData) {
             this.drawUI();
         } else {

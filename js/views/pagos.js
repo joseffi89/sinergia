@@ -3,17 +3,23 @@ window.ViewPagos = {
     planesData: null,
     pagosData: null,
     periodoActual: '',
-    filtroPlanes: [],
+    filtroTipoPlanes: [],
 
     async render() {
         const container = document.getElementById('pagos-container');
-        
+
         if (!this.periodoActual) {
             const now = new Date();
             this.periodoActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // Carga inmediata con caché
+        // Usar caché del prefetch global para pintar de inmediato
+        if (!this.alumnosData) {
+            this.alumnosData = GristData.getCached('Alumnos');
+            this.planesData  = GristData.getCached('Planes');
+            this.pagosData   = GristData.getCached('Pagos');
+        }
+
         if (this.alumnosData) {
             this.renderDashboard();
         } else {
@@ -48,9 +54,9 @@ window.ViewPagos = {
     aplicarFiltros() {
         this.periodoActual = document.getElementById('filtro-periodo').value;
         const checkboxes = document.querySelectorAll('.filtro-plan-chk');
-        this.filtroPlanes = [];
+        this.filtroTipoPlanes = [];
         checkboxes.forEach(chk => {
-            if (chk.checked) this.filtroPlanes.push(parseInt(chk.value));
+            if (chk.checked) this.filtroTipoPlanes.push(chk.value);
         });
         this.renderDashboard();
     },
@@ -96,11 +102,12 @@ window.ViewPagos = {
             }
         }
 
-        const planesMap = {};
+        const planesMap = {}; // planId -> { nombre, tipo_plan, importe }
         if (this.planesData && this.planesData.id) {
             for (let p = 0; p < this.planesData.id.length; p++) {
                 planesMap[this.planesData.id[p]] = {
                     nombre: this.planesData.nombre_plan[p],
+                    tipo: this.planesData.tipo_plan ? (this.planesData.tipo_plan[p] || '') : '',
                     importe: parseFloat(this.planesData.importe[p]) || 0
                 };
             }
@@ -117,9 +124,10 @@ window.ViewPagos = {
                     if (fechaIso && fechaIso.substring(0, 7) > this.periodoActual) continue;
 
                     const planId = this.alumnosData.plan_id[i];
-                    if (this.filtroPlanes.length > 0 && !this.filtroPlanes.includes(planId)) continue;
+                    const planInfo = planesMap[planId] || { nombre: 'Sin Plan', tipo: '', importe: 0 };
 
-                    const planInfo = planesMap[planId] || { nombre: 'Sin Plan', importe: 0 };
+                    // Filtrar por tipo_plan
+                    if (this.filtroTipoPlanes.length > 0 && !this.filtroTipoPlanes.includes(planInfo.tipo)) continue;
                     totalActivos++;
                     totalACobrar += planInfo.importe;
 
@@ -144,9 +152,13 @@ window.ViewPagos = {
                         }
                     }
 
+                    const displayName = this.alumnosData.Apellido_y_Nombre
+                        ? (this.alumnosData.Apellido_y_Nombre[i] || '-')
+                        : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
+
                     filas.push(`
                         <tr style="border-bottom: 1px solid var(--border);">
-                            <td style="padding: 12px; font-weight: 500;">${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}</td>
+                            <td style="padding: 12px; font-weight: 500;">${displayName}</td>
                             <td style="padding: 12px;">${planInfo.nombre}</td>
                             <td style="padding: 12px; font-variant-numeric: tabular-nums;">${fechaVtoStr ? fechaVtoStr.split('-').reverse().join('/') : '-'}</td>
                             <td style="padding: 12px; font-weight:600;">$${planInfo.importe}</td>
@@ -162,13 +174,16 @@ window.ViewPagos = {
             }
         }
 
+        // Checkboxes de tipo_plan (valores únicos)
+        const tiposUnicos = [...new Set(Object.values(planesMap).map(p => p.tipo).filter(t => t))];
+        tiposUnicos.sort();
         let planCheckboxesHtml = '';
-        Object.keys(planesMap).forEach(pId => {
-            const checked = this.filtroPlanes.includes(parseInt(pId)) ? 'checked' : '';
+        tiposUnicos.forEach(tipo => {
+            const checked = this.filtroTipoPlanes.includes(tipo) ? 'checked' : '';
             planCheckboxesHtml += `
                 <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:pointer;">
-                    <input type="checkbox" class="filtro-plan-chk" value="${pId}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
-                    ${planesMap[pId].nombre}
+                    <input type="checkbox" class="filtro-plan-chk" value="${tipo}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
+                    ${tipo}
                 </label>
             `;
         });

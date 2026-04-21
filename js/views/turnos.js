@@ -11,13 +11,21 @@ window.ViewTurnos = {
     filtroUbicacion: '',
 
     async render() {
-        const container = document.getElementById('turnos-container');
+        // Usar caché del prefetch global para pintar de inmediato
+        if (!this.actividadesData) {
+            this.actividadesData = GristData.getCached('Actividades');
+            this.horariosData    = GristData.getCached('Horarios_Base');
+            this.reservasData    = GristData.getCached('Turnos_Alumnos');
+            this.alumnosData     = GristData.getCached('Alumnos');
+            this.planesData      = GristData.getCached('Planes');
+            this.pagosData       = GristData.getCached('Pagos');
+        }
 
-        // Siempre mostrar el shell inmediatamente (con datos cacheados o vacíos)
+        // Pintar inmediatamente con lo que haya (caché o vacío)
         this.renderTabContent();
 
         try {
-            // Cargar todas las tablas EN PARALELO para minimizar el tiempo de espera
+            // Re-fetch en paralelo en segundo plano para datos frescos
             const [actividades, horarios, reservas, alumnos, planes, pagos] = await Promise.all([
                 GristData.getTable('Actividades').catch(() => ({ id: [] })),
                 GristData.getTable('Horarios_Base').catch(() => ({ id: [] })),
@@ -35,7 +43,8 @@ window.ViewTurnos = {
             this.pagosData = pagos;
 
             if (!this.actividadesData || !this.actividadesData.id) {
-                container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
+                document.getElementById('turnos-container').innerHTML =
+                    '<p style="color: var(--danger);">Error al conectar con Grist o tablas no encontradas.</p>';
                 return;
             }
 
@@ -43,7 +52,8 @@ window.ViewTurnos = {
         } catch (e) {
             console.error(e);
             if (!this.actividadesData) {
-                container.innerHTML = '<p style="color: var(--danger);">Ocurrió un error renderizando turnos.</p>';
+                document.getElementById('turnos-container').innerHTML =
+                    '<p style="color: var(--danger);">Ocurrió un error renderizando turnos.</p>';
             }
         }
     },

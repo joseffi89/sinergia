@@ -7,16 +7,18 @@ const App = {
     currentView: 'turnos',
 
     async init() {
-        // Init Grist
+        // Esperar a que Grist esté genuinamente listo
         await GristData.init();
-        
+
+        // Precargar TODAS las tablas en paralelo antes de mostrar nada
+        await GristData.prefetchAll();
+
         this.setupNavigation();
         this.setupActions();
-        
-        // Mock User Role
+
         document.getElementById('user-role').textContent = 'Admin';
-        
-        // Cargar vista inicial (Loader mientras se espera Grist)
+
+        // Recién ahora cargar la vista inicial — los datos ya están en caché
         this.loadView(this.currentView);
     },
 
