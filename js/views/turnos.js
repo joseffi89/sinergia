@@ -433,7 +433,20 @@ window.ViewTurnos = {
                             alumnoName = `${this.alumnosData.apellido[aIdx]}, ${this.alumnosData.nombre[aIdx]}`;
                         }
                     }
-                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName });
+                    
+                    let tipoReserva = 'Regular';
+                    if (this.reservasData.tipo_reserva && this.reservasData.tipo_reserva[i]) {
+                        tipoReserva = this.reservasData.tipo_reserva[i];
+                    }
+                    
+                    let badge = '';
+                    if (tipoReserva === 'Recuperación') {
+                        badge = '<span style="background: var(--primary); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; margin-left: 8px;">Recup.</span>';
+                    } else if (tipoReserva === 'Excepción') {
+                        badge = '<span style="background: var(--danger); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; margin-left: 8px;">Excep.</span>';
+                    }
+
+                    enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge: badge });
                 }
             }
 
@@ -442,7 +455,7 @@ window.ViewTurnos = {
                     <ul style="list-style:none; padding:0; margin:0 0 20px 0; font-size:13px;">
                         ${enrolled.map(en => `
                             <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
-                                <span><i class="ph ph-user"></i> ${en.name}</span>
+                                <span><i class="ph ph-user"></i> ${en.name} ${en.badge}</span>
                                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
                             </li>
                         `).join('')}
@@ -473,8 +486,13 @@ window.ViewTurnos = {
             <div class="form-group">
                 <label>Anotar Nuevo Alumno</label>
                 <div style="display:flex; gap:10px;">
-                    <select id="modal-select-alumno" class="form-control" style="flex:1;">
+                    <select id="modal-select-alumno" class="form-control" style="flex:2;">
                         ${alumnosOptions}
+                    </select>
+                    <select id="modal-select-tipo" class="form-control" style="flex:1;">
+                        <option value="Regular">Regular</option>
+                        <option value="Recuperación">Recuperación</option>
+                        <option value="Excepción">Excepción</option>
                     </select>
                     <button class="btn btn-primary" id="btn-anotar-alumno">Anotar</button>
                 </div>
@@ -498,10 +516,12 @@ window.ViewTurnos = {
             try {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
                 btn.disabled = true;
+                const tipoReserva = document.getElementById('modal-select-tipo').value;
                 
                 await GristData.addRecord('Turnos_Alumnos', {
                     horario_base_id: horarioBaseId,
                     alumno_id: alumnoId,
+                    tipo_reserva: tipoReserva,
                     estado: 'Confirmado'
                 });
                 
