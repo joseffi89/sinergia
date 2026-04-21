@@ -99,7 +99,15 @@ const App = {
         const btnNuevaClase = document.getElementById('btn-nueva-clase');
         if (btnNuevaClase) {
             btnNuevaClase.addEventListener('click', () => {
-                window.Modal.show('Nueva Clase', '<p>Funcionalidad en desarrollo...</p>', '<button class="btn btn-primary" onclick="window.Modal.close()">Cerrar</button>');
+                if(window.ViewTurnos) window.ViewTurnos.openNewHorarioModal();
+            });
+        }
+
+        // Setup Modal "Nuevo Plan"
+        const btnNuevoPlan = document.getElementById('btn-nuevo-plan');
+        if (btnNuevoPlan) {
+            btnNuevoPlan.addEventListener('click', () => {
+                if(window.ViewPlanes) window.ViewPlanes.openNewModal();
             });
         }
     },

@@ -83,9 +83,16 @@ window.ViewAlumnos = {
         const apellido = alumnos.apellido ? alumnos.apellido[index] : '';
         const dni = alumnos.dni ? alumnos.dni[index] : '';
         const email = alumnos.email ? alumnos.email[index] : '';
-        const fecha_ingreso = alumnos.fecha_ingreso ? alumnos.fecha_ingreso[index] : '';
+        let fecha_ingreso = alumnos.fecha_ingreso ? alumnos.fecha_ingreso[index] : '';
         const plan_id = alumnos.plan_id ? alumnos.plan_id[index] : '';
         const estado = alumnos.estado ? alumnos.estado[index] : 'Activo';
+
+        // Grist devuelve fechas como timestamp Unix (segundos)
+        if (typeof fecha_ingreso === 'number') {
+            fecha_ingreso = new Date(fecha_ingreso * 1000).toISOString().split('T')[0];
+        } else if (fecha_ingreso && typeof fecha_ingreso === 'string') {
+            fecha_ingreso = fecha_ingreso.split('T')[0]; // Por si viene como ISO
+        }
 
         let options = '<option value="">Seleccionar...</option>';
         try {
