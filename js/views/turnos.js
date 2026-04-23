@@ -100,29 +100,56 @@ window.ViewTurnos = {
 
     getCalendarioGridHtml() {
         const actividades = this.actividadesData;
-        const horarios = this.horariosData;
         if (!actividades || !actividades.id) {
-            return `<div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
-                ${['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'].map(dia => `
-                    <div class="calendar-col">
-                        <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;">${dia}</h3>
-                        <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;"><i class="ph ph-spinner ph-spin"></i></div>
-                    </div>
-                `).join('')}
-            </div>`;
+            return `<div style="text-align:center; padding:20px;"><i class="ph ph-spinner ph-spin"></i></div>`;
         }
-        return `
-            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 15px;">
-                ${['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'].map(dia => `
-                    <div class="calendar-col">
-                        <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;">${dia}</h3>
-                        <div class="dia-cards">
-                            ${this.renderClasesDia(dia, horarios, actividades)}
-                        </div>
-                    </div>
+
+        const validClasses = this.getFilteredClasses();
+        
+        const timesSet = new Set();
+        validClasses.forEach(c => timesSet.add(c.horaInicio));
+        const uniqueTimes = Array.from(timesSet).sort((a, b) => {
+            const ta = parseInt(a.replace(':', ''));
+            const tb = parseInt(b.replace(':', ''));
+            return ta - tb;
+        });
+
+        const dias = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+
+        if (uniqueTimes.length === 0) {
+            return `<div style="text-align:center; padding: 40px; color: var(--text-muted);">No hay clases que coincidan con los filtros.</div>`;
+        }
+
+        let html = `
+            <div class="calendar-grid" style="display:grid; grid-template-columns: 60px repeat(6, minmax(140px, 1fr)); gap: 10px; overflow-x: auto;">
+                <div style="padding: 10px;"></div>
+                ${dias.map(dia => `
+                    <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin: 0; position: sticky; top: 0; z-index: 10;">${dia}</h3>
                 `).join('')}
-            </div>
         `;
+
+        for (const time of uniqueTimes) {
+            html += `
+                <div style="text-align: right; padding-right: 10px; font-weight: 600; color: var(--text-muted); padding-top: 15px; border-top: 1px solid var(--border); font-size: 13px;">
+                    ${time}
+                </div>
+            `;
+            for (const dia of dias) {
+                const classesInCell = validClasses.filter(c => c.dia === dia && c.horaInicio === time);
+                let cellHtml = `<div style="border-top: 1px solid var(--border); padding-top: 10px; padding-bottom: 10px;">`;
+                
+                if (classesInCell.length > 0) {
+                    for (const c of classesInCell) {
+                        cellHtml += this.renderClaseCard(c, dia, actividades);
+                    }
+                }
+                cellHtml += `</div>`;
+                html += cellHtml;
+            }
+        }
+
+        html += `</div>`;
+        return html;
     },
 
     getCalendarioHtml() {
@@ -220,46 +247,33 @@ window.ViewTurnos = {
         return { regulares: reg, recuperaciones: rec, excepciones: exc };
     },
 
-    renderClasesDia(dia, horarios, actividades) {
-        if (!horarios || !horarios.dia_semana) return '';
+    getFilteredClasses() {
+        const horarios = this.horariosData;
+        if (!horarios || !horarios.id) return [];
 
-        let clasesDelDia = [];
+        let validClasses = [];
         for (let i = 0; i < horarios.id.length; i++) {
-            if (horarios.dia_semana[i] === dia) {
-                clasesDelDia.push({
-                    id: horarios.id[i],
-                    actId: horarios.actividad_id[i],
-                    horaInicio: horarios.hora_inicio[i],
-                    horaFin: horarios.hora_fin[i],
-                    obs: horarios.observaciones ? horarios.observaciones[i] : '',
-                    ubicacion: horarios.ubicacion ? horarios.ubicacion[i] : ''
-                });
-            }
-        }
+            const c = {
+                id: horarios.id[i],
+                dia: horarios.dia_semana[i],
+                actId: horarios.actividad_id[i],
+                horaInicio: horarios.hora_inicio[i] || '',
+                horaFin: horarios.hora_fin[i] || '',
+                obs: horarios.observaciones ? horarios.observaciones[i] : '',
+                ubicacion: horarios.ubicacion ? horarios.ubicacion[i] : ''
+            };
 
-        clasesDelDia.sort((a, b) => {
-            const timeA = a.horaInicio ? a.horaInicio.replace(':', '') : '0000';
-            const timeB = b.horaInicio ? b.horaInicio.replace(':', '') : '0000';
-            return parseInt(timeA) - parseInt(timeB);
-        });
+            if (!c.horaInicio) continue;
+            if (this.filtroActividad && c.actId.toString() !== this.filtroActividad) continue;
 
-        let clasesHtml = '';
-        for (const c of clasesDelDia) {
-            const actId = c.actId;
-            const horaInicio = c.horaInicio;
-
-            if (this.filtroActividad && actId.toString() !== this.filtroActividad) continue;
-
-            if (this.filtroTurno && horaInicio) {
-                const hora = parseInt(horaInicio.split(':')[0]);
+            if (this.filtroTurno) {
+                const hora = parseInt(c.horaInicio.split(':')[0]);
                 if (this.filtroTurno === 'mañana' && hora >= 12) continue;
                 if (this.filtroTurno === 'tarde' && (hora < 12 || hora >= 18)) continue;
                 if (this.filtroTurno === 'noche' && hora < 18) continue;
             }
 
-            if (this.filtroHora && horaInicio !== this.filtroHora) continue;
-
-            // Filtro por ubicacion
+            if (this.filtroHora && c.horaInicio !== this.filtroHora) continue;
             if (this.filtroUbicacion && (c.ubicacion || '') !== this.filtroUbicacion) continue;
 
             if (this.filtroAlumnoTurno) {
@@ -288,46 +302,50 @@ window.ViewTurnos = {
                 if (!isEnrolled) continue;
             }
 
-            let actName = "Desc.";
-            let color = "var(--primary)";
-            let cupoMax = 0;
-
-            if (actividades && actividades.id) {
-                const actIndex = actividades.id.indexOf(actId);
-                if (actIndex !== -1) {
-                    actName = actividades.nombre_actividad[actIndex];
-                    color = actividades.color_ui[actIndex] || color;
-                    cupoMax = actividades.cupo_maximo[actIndex] || 0;
-                }
-            }
-
-            const info = this.getAnotadosInfo(c.id);
-            const cupoBadge = cupoMax > 0 ? `${info.regulares}/${cupoMax}` : `${info.regulares}`;
-            let extraBadges = '';
-            if (info.recuperaciones > 0) extraBadges += `<span style="color:var(--primary); font-size:11px; margin-right:5px; font-weight:600;">${info.recuperaciones} R</span>`;
-            if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
-
-            const cupoLleno = cupoMax > 0 && info.regulares >= cupoMax;
-            const cupoBadgeStyle = cupoLleno
-                ? 'color:#e8924a; background:rgba(232,146,74,0.15); border:1px solid rgba(232,146,74,0.35);'
-                : 'background: rgba(255,255,255,0.1);';
-
-            clasesHtml += `
-                <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius); margin-bottom: 10px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${actId}, '${actName}', '${dia} ${horaInicio}')">
-                    <div style="display:inline-flex; align-items:center; gap:5px; background:${color}22; border:1px solid ${color}55; border-radius:5px; padding:2px 8px; margin-bottom:6px;">
-                        <i class="ph ph-clock" style="color:${color}; font-size:13px;"></i>
-                        <span style="font-size:14px; font-weight:700; color:${color};">${c.horaInicio}</span>
-                    </div>
-                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 2px;">${actName}</div>
-                    ${c.ubicacion ? `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; ${cupoBadgeStyle}">Cupos: ${cupoBadge}</span>
-                        <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted);"></i></div>
-                    </div>
-                </div>
-            `;
+            validClasses.push(c);
         }
-        return clasesHtml || '<div style="font-size:12px; text-align:center; color: var(--text-muted); padding: 10px;">Sin clases</div>';
+        return validClasses;
+    },
+
+    renderClaseCard(c, dia, actividades) {
+        let actName = "Desc.";
+        let color = "var(--primary)";
+        let cupoMax = 0;
+
+        if (actividades && actividades.id) {
+            const actIndex = actividades.id.indexOf(c.actId);
+            if (actIndex !== -1) {
+                actName = actividades.nombre_actividad[actIndex];
+                color = actividades.color_ui[actIndex] || color;
+                cupoMax = actividades.cupo_maximo[actIndex] || 0;
+            }
+        }
+
+        const info = this.getAnotadosInfo(c.id);
+        const cupoBadge = cupoMax > 0 ? `${info.regulares}/${cupoMax}` : `${info.regulares}`;
+        let extraBadges = '';
+        if (info.recuperaciones > 0) extraBadges += `<span style="color:var(--primary); font-size:11px; margin-right:5px; font-weight:600;">${info.recuperaciones} R</span>`;
+        if (info.excepciones > 0) extraBadges += `<span style="color:var(--danger); font-size:11px; margin-right:5px; font-weight:600;">${info.excepciones} E</span>`;
+
+        const cupoLleno = cupoMax > 0 && info.regulares >= cupoMax;
+        const cupoBadgeStyle = cupoLleno
+            ? 'color:#e8924a; background:rgba(232,146,74,0.15); border:1px solid rgba(232,146,74,0.35);'
+            : 'background: rgba(255,255,255,0.1);';
+
+        return `
+            <div class="turno-card" style="background: var(--bg-card); border: 1px solid var(--border); padding: 10px; border-radius: var(--radius); margin-bottom: 8px; border-left: 4px solid ${color}; cursor: pointer; transition: transform 0.2s;" onclick="window.ViewTurnos.openGestionClaseModal(${c.id}, ${c.actId}, '${actName}', '${dia} ${c.horaInicio}')">
+                <div style="display:inline-flex; align-items:center; gap:5px; background:${color}22; border:1px solid ${color}55; border-radius:5px; padding:2px 6px; margin-bottom:4px;">
+                    <i class="ph ph-clock" style="color:${color}; font-size:12px;"></i>
+                    <span style="font-size:12px; font-weight:700; color:${color};">${c.horaInicio}</span>
+                </div>
+                <div style="font-weight: 500; font-size: 13px; margin-bottom: 2px;">${actName}</div>
+                ${c.ubicacion ? `<div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size: 10px; padding: 2px 4px; border-radius: 4px; ${cupoBadgeStyle}">Cupos: ${cupoBadge}</span>
+                    <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted); font-size: 12px;"></i></div>
+                </div>
+            </div>
+        `;
     },
 
     getActividadesHtml() {
