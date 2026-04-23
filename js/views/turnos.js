@@ -121,19 +121,14 @@ window.ViewTurnos = {
         }
 
         let html = `
-            <div class="calendar-grid" style="display:grid; grid-template-columns: 60px repeat(6, minmax(140px, 1fr)); gap: 10px; overflow-x: auto;">
-                <div style="padding: 10px;"></div>
+            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 10px; overflow-x: auto;">
                 ${dias.map(dia => `
                     <h3 style="text-align:center; padding: 10px; background: var(--bg-card); border-radius: var(--radius); font-size: 14px; border-bottom: 2px solid var(--primary); margin: 0; position: sticky; top: 0; z-index: 10;">${dia}</h3>
                 `).join('')}
         `;
 
         for (const time of uniqueTimes) {
-            html += `
-                <div style="text-align: right; padding-right: 10px; font-weight: 600; color: var(--text-muted); padding-top: 15px; border-top: 1px solid var(--border); font-size: 13px;">
-                    ${time}
-                </div>
-            `;
+
             for (const dia of dias) {
                 const classesInCell = validClasses.filter(c => c.dia === dia && c.horaInicio === time);
                 let cellHtml = `<div style="border-top: 1px solid var(--border); padding-top: 10px; padding-bottom: 10px;">`;
@@ -142,6 +137,8 @@ window.ViewTurnos = {
                     for (const c of classesInCell) {
                         cellHtml += this.renderClaseCard(c, dia, actividades);
                     }
+                } else {
+                    cellHtml += '<div style="font-size:12px; text-align:center; color: var(--text-muted); padding: 10px;">Sin clases</div>';
                 }
                 cellHtml += `</div>`;
                 html += cellHtml;
