@@ -36,7 +36,19 @@ window.ViewPlanes = {
         const actividades = GristData.getCached('Actividades');
 
         let cardsHtml = '';
-        for (let i = 0; i < planes.id.length; i++) {
+        const sortedIndices = [];
+        if (planes && planes.id) {
+            for (let i = 0; i < planes.id.length; i++) {
+                sortedIndices.push(i);
+            }
+            sortedIndices.sort((a, b) => {
+                const nameA = planes.nombre_plan && planes.nombre_plan[a] ? planes.nombre_plan[a].toLowerCase() : '';
+                const nameB = planes.nombre_plan && planes.nombre_plan[b] ? planes.nombre_plan[b].toLowerCase() : '';
+                return nameA.localeCompare(nameB);
+            });
+        }
+
+        for (const i of sortedIndices) {
             let colorStr = 'var(--primary)';
             let isMulticolor = false;
             
@@ -74,8 +86,8 @@ window.ViewPlanes = {
                         <i class="ph ph-clock"></i> ${planes.frecuencia_semanal[i]} veces por semana
                     </p>
                     ${observaciones ? `<p style="color: var(--text-muted); font-size: 13px; margin-bottom: 10px; font-style: italic;"><i class="ph ph-note"></i> ${observaciones}</p>` : ''}
-                    <div style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px; text-align: right;">
-                        <button class="btn btn-secondary" style="font-size: 13px;" onclick="window.ViewPlanes.openEditModal(${i})"><i class="ph ph-pencil-simple"></i> Editar</button>
+                    <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; text-align: right;">
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="window.ViewPlanes.openEditModal(${i})"><i class="ph ph-pencil-simple"></i> Editar</button>
                     </div>
                 </div>
             `;
