@@ -776,11 +776,11 @@ window.ViewTurnos = {
 
             if (enrolled.length > 0) {
                 enrolledHtml = `
-                    <ul style="list-style:none; padding:0; margin:0 0 20px 0; font-size:13px;">
+                    <ul style="list-style:none; padding:0; margin:0 0 20px 0; font-size:13px; column-count: 2; column-gap: 15px;">
                         ${enrolled.map(en => `
-                            <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
-                                <span style="display:flex; align-items:center;">${en.circle} <i class="ph ph-user" style="margin-right:4px;"></i> ${en.name} ${en.badge}</span>
-                                <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, ${actId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
+                            <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); break-inside: avoid;">
+                                <span style="display:flex; align-items:center; min-width:0; margin-right:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${en.circle} <i class="ph ph-user" style="margin-right:4px;"></i> <span title="${en.name}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${en.name}</span> ${en.badge}</span>
+                                <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger); flex-shrink:0;" onclick="window.ViewTurnos.bajarAlumno(${en.id}, ${horarioBaseId}, ${actId}, '${actName}', '${horarioLabel}')"><i class="ph ph-trash"></i></button>
                             </li>
                         `).join('')}
                     </ul>
@@ -838,43 +838,44 @@ window.ViewTurnos = {
                 horarioObs = this.horariosData.observaciones ? (this.horariosData.observaciones[hIdx] || '') : '';
             }
         }
-        const horarioInfoHtml = (horarioUbicacion || horarioObs) ? `
+        const horarioInfoHtml = horarioObs ? `
             <div style="background: var(--bg-dark); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 18px; font-size: 13px; border-left: 3px solid var(--primary);">
-                ${horarioUbicacion ? `<div style="color: var(--text-muted);"><i class="ph ph-map-pin"></i> <strong>Ubicación:</strong> ${horarioUbicacion}</div>` : ''}
-                ${horarioObs ? `<div style="color: var(--text-muted); margin-top:4px;"><i class="ph ph-note"></i> <strong>Obs:</strong> ${horarioObs}</div>` : ''}
+                <div style="color: var(--text-muted);"><i class="ph ph-note"></i> <strong>Obs:</strong> ${horarioObs}</div>
             </div>
         ` : '';
 
         const formHtml = `
             ${horarioInfoHtml}
+            <div style="margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border);">
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-weight:600;">Anotar Regular</label>
+                    <div style="display:flex; gap:10px;">
+                        <select id="modal-select-regular" class="form-control" style="flex:1;">
+                            ${habilitadosHtml}
+                        </select>
+                        <button class="btn btn-primary" id="btn-anotar-regular">Anotar</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                     <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-recuperacion">+ Recuperación</button>
+                     <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-excepcion">+ Excepción</button>
+                </div>
+
+                <div class="form-group" id="special-enrollment-group" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+                    <label id="special-enrollment-label" style="color:var(--primary); font-weight:600;">Anotar Especial</label>
+                    <div style="display:flex; gap:10px;">
+                        <select id="modal-select-special" class="form-control" style="flex:1;">
+                            ${todosHtml}
+                        </select>
+                        <button class="btn btn-primary" id="btn-anotar-special">Anotar</button>
+                    </div>
+                </div>
+            </div>
+
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid var(--border);">Anotados</h4>
                 ${enrolledHtml}
-            </div>
-            
-            <div class="form-group">
-                <label>Anotar Regular</label>
-                <div style="display:flex; gap:10px;">
-                    <select id="modal-select-regular" class="form-control" style="flex:1;">
-                        ${habilitadosHtml}
-                    </select>
-                    <button class="btn btn-primary" id="btn-anotar-regular">Anotar</button>
-                </div>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top: 15px;">
-                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-recuperacion">+ Recuperación</button>
-                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" id="btn-show-excepcion">+ Excepción</button>
-            </div>
-
-            <div class="form-group" id="special-enrollment-group" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
-                <label id="special-enrollment-label" style="color:var(--primary);">Anotar Especial</label>
-                <div style="display:flex; gap:10px;">
-                    <select id="modal-select-special" class="form-control" style="flex:1;">
-                        ${todosHtml}
-                    </select>
-                    <button class="btn btn-primary" id="btn-anotar-special">Anotar</button>
-                </div>
             </div>
         `;
 
@@ -882,7 +883,8 @@ window.ViewTurnos = {
             <button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>
         `;
 
-        window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
+        const tagUbicacion = horarioUbicacion ? `<span style="font-size: 13px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 4px; vertical-align: middle; margin-left: 10px; font-weight: normal; border: 1px solid rgba(255,255,255,0.15);"><i class="ph ph-map-pin"></i> ${horarioUbicacion}</span>` : '';
+        window.Modal.show(`${actName} - ${horarioLabel}${tagUbicacion}`, formHtml, footerHtml);
 
         let tipoEspecialActual = 'Recuperación';
 
