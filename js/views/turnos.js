@@ -469,7 +469,8 @@ window.ViewTurnos = {
                         dia: this.horariosData.dia_semana[i],
                         inicio: this.horariosData.hora_inicio[i],
                         fin: this.horariosData.hora_fin[i],
-                        obs: this.horariosData.observaciones ? this.horariosData.observaciones[i] : ''
+                        obs: this.horariosData.observaciones ? this.horariosData.observaciones[i] : '',
+                        ubicacion: this.horariosData.ubicacion ? this.horariosData.ubicacion[i] : ''
                     });
                 }
             }
@@ -496,10 +497,10 @@ window.ViewTurnos = {
                                 <td style="padding:8px; font-weight:500;">${sch.dia}</td>
                                 <td style="padding:8px;">
                                     ${sch.inicio} - ${sch.fin}
-                                    <div style="font-size:11px; color:var(--text-muted);">${sch.obs || ''}</div>
+                                    <div style="font-size:11px; color:var(--text-muted);">${sch.ubicacion ? sch.ubicacion + ' - ' : ''}${sch.obs || ''}</div>
                                 </td>
                                 <td style="padding:8px; text-align:right; white-space: nowrap;">
-                                    <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--primary); margin-right:4px;" title="Editar Observación" onclick="window.ViewTurnos.editObservacion(${sch.id}, '${sch.obs}', ${index})"><i class="ph ph-pencil-simple"></i></button>
+                                    <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--primary); margin-right:4px;" title="Editar Detalles" onclick="window.ViewTurnos.editHorarioDetalles(${sch.id}, '${sch.obs || ''}', '${sch.ubicacion || ''}', ${index})"><i class="ph ph-pencil-simple"></i></button>
                                     <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; color:var(--danger);" onclick="window.ViewTurnos.deleteHorario(${sch.id}, ${index})"><i class="ph ph-trash"></i></button>
                                 </td>
                             </tr>
@@ -537,9 +538,20 @@ window.ViewTurnos = {
                         <input type="time" id="bulk-fin" class="form-control">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Observaciones (Ej. Profesor, Sala, etc.)</label>
-                    <input type="text" id="bulk-obs" class="form-control" placeholder="Ej. Profe Juan">
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Ubicación</label>
+                        <select id="bulk-ubicacion" class="form-control">
+                            <option value="">Seleccionar Ubicación...</option>
+                            <option value="Salón Grande">Salón Grande</option>
+                            <option value="Salón Chico">Salón Chico</option>
+                            <option value="Sinergia">Sinergia</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Observaciones</label>
+                        <input type="text" id="bulk-obs" class="form-control" placeholder="Ej. Profe Juan">
+                    </div>
                 </div>
             </div>
         `;
@@ -557,6 +569,7 @@ window.ViewTurnos = {
             const hora_inicio = document.getElementById('bulk-inicio').value;
             const hora_fin = document.getElementById('bulk-fin').value;
             const observaciones = document.getElementById('bulk-obs').value;
+            const ubicacion = document.getElementById('bulk-ubicacion').value;
 
             if (diasSeleccionados.length === 0) {
                 alert("Debes seleccionar al menos un día.");
@@ -572,7 +585,8 @@ window.ViewTurnos = {
                 dia_semana: dia,
                 hora_inicio: hora_inicio,
                 hora_fin: hora_fin,
-                observaciones: observaciones
+                observaciones: observaciones,
+                ubicacion: ubicacion
             }));
 
             const btn = document.getElementById('btn-save-bulk');
@@ -603,18 +617,50 @@ window.ViewTurnos = {
         }
     },
 
-    async editObservacion(horarioId, currentObs, actIndex) {
-        const nuevaObs = prompt("Editar Observación:", currentObs || '');
-        if (nuevaObs === null) return;
+    editHorarioDetalles(horarioId, currentObs, currentUbic, actIndex) {
+        const formHtml = `
+            <div class="form-group">
+                <label>Ubicación</label>
+                <select id="edit-ubicacion" class="form-control">
+                    <option value="">Seleccionar Ubicación...</option>
+                    <option value="Salón Grande" ${currentUbic === 'Salón Grande' ? 'selected' : ''}>Salón Grande</option>
+                    <option value="Salón Chico" ${currentUbic === 'Salón Chico' ? 'selected' : ''}>Salón Chico</option>
+                    <option value="Sinergia" ${currentUbic === 'Sinergia' ? 'selected' : ''}>Sinergia</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Observaciones</label>
+                <input type="text" id="edit-obs" class="form-control" value="${currentObs || ''}">
+            </div>
+        `;
 
-        try {
-            await GristData.updateRecord('Horarios_Base', horarioId, { observaciones: nuevaObs });
-            await new Promise(r => setTimeout(r, 600));
-            await this.render();
-            this.openHorariosModal(actIndex);
-        } catch (e) {
-            alert("Error al editar observación");
-        }
+        const footerHtml = `
+            <button class="btn btn-secondary" onclick="window.Modal.close()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-save-edit-horario">Guardar</button>
+        `;
+
+        window.Modal.show('Editar Detalles', formHtml, footerHtml);
+
+        document.getElementById('btn-save-edit-horario').addEventListener('click', async () => {
+            const nuevaObs = document.getElementById('edit-obs').value;
+            const nuevaUbic = document.getElementById('edit-ubicacion').value;
+            
+            const btn = document.getElementById('btn-save-edit-horario');
+            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
+            btn.disabled = true;
+
+            try {
+                await GristData.updateRecord('Horarios_Base', horarioId, { observaciones: nuevaObs, ubicacion: nuevaUbic });
+                await new Promise(r => setTimeout(r, 600));
+                await this.render();
+                window.Modal.close();
+                this.openHorariosModal(actIndex);
+            } catch (e) {
+                alert("Error al editar detalles");
+                btn.innerHTML = 'Guardar';
+                btn.disabled = false;
+            }
+        });
     },
 
     getAlumnoPagoStatus(alumnoId) {
