@@ -847,6 +847,10 @@ window.ViewTurnos = {
             ${tagUbicacion}
             ${horarioInfoHtml}
             <div style="margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border);">
+                <div style="position:relative; margin-bottom:15px;">
+                    <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                    <input type="text" id="modal-search-alumno" class="form-control" placeholder="Buscar alumno por nombre o apellido..." style="padding-left: 32px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
+                </div>
                 <div class="form-group" style="margin-bottom: 10px;">
                     <label style="font-weight:600;">Anotar Regular</label>
                     <div style="display:flex; gap:10px;">
@@ -884,6 +888,24 @@ window.ViewTurnos = {
         `;
 
         window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
+
+        const searchInput = document.getElementById('modal-search-alumno');
+        const selectRegular = document.getElementById('modal-select-regular');
+        const selectSpecial = document.getElementById('modal-select-special');
+
+        if (searchInput && selectRegular && selectSpecial) {
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                
+                const filteredHabilitados = habilitadosOpts.filter(o => o.displayName.toLowerCase().includes(term));
+                selectRegular.innerHTML = '<option value="">Seleccionar Alumno...</option>' + 
+                    filteredHabilitados.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
+
+                const filteredTodos = todosOpts.filter(o => o.displayName.toLowerCase().includes(term));
+                selectSpecial.innerHTML = '<option value="">Seleccionar Alumno...</option>' + 
+                    filteredTodos.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
+            });
+        }
 
         let tipoEspecialActual = 'Recuperación';
 
