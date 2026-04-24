@@ -236,10 +236,10 @@ window.ViewAlumnos = {
                 for (let i = 0; i < pagos.id.length; i++) {
                     if (pagos.alumno_id[i] === alumnoId) {
                         let fechaIso = '';
-                        if (typeof pagos.fecha_pago[i] === 'number') {
-                            fechaIso = new Date(pagos.fecha_pago[i] * 1000).toISOString().split('T')[0];
-                        } else if (typeof pagos.fecha_pago[i] === 'string') {
-                            fechaIso = pagos.fecha_pago[i].split('T')[0];
+                        if (typeof pagos.fecha[i] === 'number') {
+                            fechaIso = new Date(pagos.fecha[i] * 1000).toISOString().split('T')[0];
+                        } else if (typeof pagos.fecha[i] === 'string') {
+                            fechaIso = pagos.fecha[i].split('T')[0];
                         }
 
                         historial.push({
