@@ -335,8 +335,10 @@ window.ViewTurnos = {
                     <i class="ph ph-clock" style="color:${color}; font-size:12px;"></i>
                     <span style="font-size:12px; font-weight:700; color:${color};">${c.horaInicio}</span>
                 </div>
-                <div style="font-weight: 500; font-size: 13px; margin-bottom: 2px;">${actName}</div>
-                ${c.ubicacion ? `<div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 5px;">
+                    <div style="font-weight: 500; font-size: 13px;">${actName}</div>
+                    ${c.ubicacion ? `<div style="font-size: 10px; background: #e8924a; color: white; padding: 2px 6px; border-radius: 4px; white-space: nowrap;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
+                </div>
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-size: 10px; padding: 2px 4px; border-radius: 4px; ${cupoBadgeStyle}">Cupos: ${cupoBadge}</span>
                     <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted); font-size: 12px;"></i></div>
@@ -820,10 +822,8 @@ window.ViewTurnos = {
         habilitadosOpts.sort((a, b) => a.displayName.localeCompare(b.displayName));
         todosOpts.sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-        let habilitadosHtml = '<option value="">Seleccionar Alumno...</option>' +
-            habilitadosOpts.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
-        let todosHtml = '<option value="">Seleccionar Alumno...</option>' +
-            todosOpts.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
+        let habilitadosHtml = '<datalist id="dl-regular">' + habilitadosOpts.map(o => `<option value="${o.displayName}"></option>`).join('') + '</datalist>';
+        let todosHtml = '<datalist id="dl-special">' + todosOpts.map(o => `<option value="${o.displayName}"></option>`).join('') + '</datalist>';
 
         // Datos del horario (ubicacion y observaciones)
         let horarioUbicacion = '';
@@ -847,16 +847,11 @@ window.ViewTurnos = {
             ${tagUbicacion}
             ${horarioInfoHtml}
             <div style="margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border);">
-                <div style="position:relative; margin-bottom:15px;">
-                    <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                    <input type="text" id="modal-search-alumno" class="form-control" placeholder="Buscar alumno por nombre o apellido..." style="padding-left: 32px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
-                </div>
                 <div class="form-group" style="margin-bottom: 10px;">
                     <label style="font-weight:600;">Anotar Regular</label>
                     <div style="display:flex; gap:10px;">
-                        <select id="modal-select-regular" class="form-control" style="flex:1;">
-                            ${habilitadosHtml}
-                        </select>
+                        <input type="text" id="modal-select-regular" list="dl-regular" class="form-control" style="flex:1;" placeholder="Buscar o seleccionar...">
+                        ${habilitadosHtml}
                         <button class="btn btn-primary" id="btn-anotar-regular">Anotar</button>
                     </div>
                 </div>
@@ -869,9 +864,8 @@ window.ViewTurnos = {
                 <div class="form-group" id="special-enrollment-group" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
                     <label id="special-enrollment-label" style="color:var(--primary); font-weight:600;">Anotar Especial</label>
                     <div style="display:flex; gap:10px;">
-                        <select id="modal-select-special" class="form-control" style="flex:1;">
-                            ${todosHtml}
-                        </select>
+                        <input type="text" id="modal-select-special" list="dl-special" class="form-control" style="flex:1;" placeholder="Buscar o seleccionar...">
+                        ${todosHtml}
                         <button class="btn btn-primary" id="btn-anotar-special">Anotar</button>
                     </div>
                 </div>
@@ -889,24 +883,6 @@ window.ViewTurnos = {
 
         window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
 
-        const searchInput = document.getElementById('modal-search-alumno');
-        const selectRegular = document.getElementById('modal-select-regular');
-        const selectSpecial = document.getElementById('modal-select-special');
-
-        if (searchInput && selectRegular && selectSpecial) {
-            searchInput.addEventListener('input', (e) => {
-                const term = e.target.value.toLowerCase();
-                
-                const filteredHabilitados = habilitadosOpts.filter(o => o.displayName.toLowerCase().includes(term));
-                selectRegular.innerHTML = '<option value="">Seleccionar Alumno...</option>' + 
-                    filteredHabilitados.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
-
-                const filteredTodos = todosOpts.filter(o => o.displayName.toLowerCase().includes(term));
-                selectSpecial.innerHTML = '<option value="">Seleccionar Alumno...</option>' + 
-                    filteredTodos.map(o => `<option value="${o.aid}">${o.displayName}</option>`).join('');
-            });
-        }
-
         let tipoEspecialActual = 'Recuperación';
 
         document.getElementById('btn-show-recuperacion').addEventListener('click', () => {
@@ -923,12 +899,14 @@ window.ViewTurnos = {
             tipoEspecialActual = 'Excepción';
         });
 
-        const handleAnotar = async (btnId, selectId, tipoReserva) => {
-            const alumnoId = parseInt(document.getElementById(selectId).value);
-            if (!alumnoId) {
-                alert("Seleccione un alumno");
+        const handleAnotar = async (btnId, inputId, tipoReserva, optsList) => {
+            const inputVal = document.getElementById(inputId).value;
+            const match = optsList.find(o => o.displayName === inputVal);
+            if (!match) {
+                alert("Seleccione un alumno válido de la lista.");
                 return;
             }
+            const alumnoId = match.aid;
             const btn = document.getElementById(btnId);
             try {
                 btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
@@ -951,8 +929,8 @@ window.ViewTurnos = {
             }
         };
 
-        document.getElementById('btn-anotar-regular').addEventListener('click', () => handleAnotar('btn-anotar-regular', 'modal-select-regular', 'Regular'));
-        document.getElementById('btn-anotar-special').addEventListener('click', () => handleAnotar('btn-anotar-special', 'modal-select-special', tipoEspecialActual));
+        document.getElementById('btn-anotar-regular').addEventListener('click', () => handleAnotar('btn-anotar-regular', 'modal-select-regular', 'Regular', habilitadosOpts));
+        document.getElementById('btn-anotar-special').addEventListener('click', () => handleAnotar('btn-anotar-special', 'modal-select-special', tipoEspecialActual, todosOpts));
     },
 
     async bajarAlumno(reservaId, horarioBaseId, actId, actName, horarioLabel) {
