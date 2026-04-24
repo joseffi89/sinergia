@@ -188,28 +188,26 @@ window.ViewTurnos = {
         `;
 
         const searchInputHtml = `
-            <div style="display:flex; gap:10px; align-items:center;">
-                <div style="position:relative; min-width:220px;">
-                    <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                    <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px; width:100%;">
-                </div>
-                <div style="position:relative; width:120px;">
-                    <i class="ph ph-clock" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
-                    <input type="time" id="filtro-hora-turno" class="form-control" value="${this.filtroHora || ''}" onchange="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px;">
-                </div>
+            <div style="position:relative; flex:1; min-width:180px;">
+                <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                <input type="text" id="filtro-alumno-turno" class="form-control" placeholder="Buscar alumno..." value="${this.filtroAlumnoTurno}" onkeyup="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px; width:100%;">
+            </div>
+            <div style="position:relative; width:120px; flex-shrink:0;">
+                <i class="ph ph-clock" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                <input type="time" id="filtro-hora-turno" class="form-control" value="${this.filtroHora || ''}" onchange="window.ViewTurnos.aplicarFiltros()" style="background: var(--bg-card); color: white; border: 1px solid var(--border); padding-left: 32px; width:100%;">
             </div>
         `;
 
         return `
             <div class="calendar-header" style="margin-bottom: 20px;">
                 <div class="filters" style="display:flex; gap: 8px; align-items:center; flex-wrap:wrap;">
-                    <select id="filtro-actividad" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                    <select id="filtro-actividad" class="form-control" style="width:auto; flex:1; min-width:150px; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${optionsHtml}
                     </select>
-                    <select id="filtro-turno" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                    <select id="filtro-turno" class="form-control" style="width:auto; flex:1; min-width:150px; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${turnosHtml}
                     </select>
-                    <select id="filtro-ubicacion" class="form-control" style="width:auto; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
+                    <select id="filtro-ubicacion" class="form-control" style="width:auto; flex:1; min-width:150px; background: var(--bg-card); color: white; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius);" onchange="window.ViewTurnos.aplicarFiltros()">
                         ${ubicacionesHtml}
                     </select>
                     ${searchInputHtml}
