@@ -11,7 +11,7 @@ window.Modal = {
     show(title, bodyHtml, footerHtml) {
         if (!this.overlay) this.init();
         
-        this.title.textContent = title;
+        this.title.innerHTML = title;
         this.body.innerHTML = bodyHtml;
         this.footer.innerHTML = footerHtml;
         

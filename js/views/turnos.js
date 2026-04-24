@@ -14,11 +14,11 @@ window.ViewTurnos = {
         // Usar caché del prefetch global para pintar de inmediato
         if (!this.actividadesData) {
             this.actividadesData = GristData.getCached('Actividades');
-            this.horariosData    = GristData.getCached('Horarios_Base');
-            this.reservasData    = GristData.getCached('Turnos_Alumnos');
-            this.alumnosData     = GristData.getCached('Alumnos');
-            this.planesData      = GristData.getCached('Planes');
-            this.pagosData       = GristData.getCached('Pagos');
+            this.horariosData = GristData.getCached('Horarios_Base');
+            this.reservasData = GristData.getCached('Turnos_Alumnos');
+            this.alumnosData = GristData.getCached('Alumnos');
+            this.planesData = GristData.getCached('Planes');
+            this.pagosData = GristData.getCached('Pagos');
         }
 
         // Pintar inmediatamente con lo que haya (caché o vacío)
@@ -105,7 +105,7 @@ window.ViewTurnos = {
         }
 
         const validClasses = this.getFilteredClasses();
-        
+
         const timesSet = new Set();
         validClasses.forEach(c => timesSet.add(c.horaInicio));
         const uniqueTimes = Array.from(timesSet).sort((a, b) => {
@@ -132,7 +132,7 @@ window.ViewTurnos = {
             for (const dia of dias) {
                 const classesInCell = validClasses.filter(c => c.dia === dia && c.horaInicio === time);
                 let cellHtml = `<div style="border-top: 1px solid var(--border); padding-top: 10px; padding-bottom: 10px;">`;
-                
+
                 if (classesInCell.length > 0) {
                     for (const c of classesInCell) {
                         cellHtml += this.renderClaseCard(c, dia, actividades);
@@ -335,10 +335,8 @@ window.ViewTurnos = {
                     <i class="ph ph-clock" style="color:${color}; font-size:12px;"></i>
                     <span style="font-size:12px; font-weight:700; color:${color};">${c.horaInicio}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 5px;">
-                    <div style="font-weight: 500; font-size: 13px;">${actName}</div>
-                    ${c.ubicacion ? `<div style="font-size: 10px; background: #e8924a; color: white; padding: 2px 6px; border-radius: 4px; white-space: nowrap;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
-                </div>
+                <div style="font-weight: 500; font-size: 13px; margin-bottom: 2px;">${actName}</div>
+                ${c.ubicacion ? `<div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;"><i class="ph ph-map-pin"></i> ${c.ubicacion}</div>` : ''}
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-size: 10px; padding: 2px 4px; border-radius: 4px; ${cupoBadgeStyle}">Cupos: ${cupoBadge}</span>
                     <div>${extraBadges} <i class="ph ph-users" style="color: var(--text-muted); font-size: 12px;"></i></div>
@@ -661,7 +659,7 @@ window.ViewTurnos = {
         document.getElementById('btn-save-edit-horario').addEventListener('click', async () => {
             const nuevaObs = document.getElementById('edit-obs').value;
             const nuevaUbic = document.getElementById('edit-ubicacion').value;
-            
+
             const btn = document.getElementById('btn-save-edit-horario');
             btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Guardando...';
             btn.disabled = true;
@@ -841,10 +839,7 @@ window.ViewTurnos = {
             </div>
         ` : '';
 
-        const tagUbicacion = horarioUbicacion ? `<div style="margin-bottom: 15px;"><span style="font-size: 13px; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); color: var(--text-muted);"><i class="ph ph-map-pin"></i> ${horarioUbicacion}</span></div>` : '';
-
         const formHtml = `
-            ${tagUbicacion}
             ${horarioInfoHtml}
             <div style="margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border);">
                 <div class="form-group" style="margin-bottom: 10px;">
@@ -881,7 +876,8 @@ window.ViewTurnos = {
             <button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>
         `;
 
-        window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
+        const titleTagUbicacion = horarioUbicacion ? `<span style="font-size: 12px; background: #e8924a; color: white; padding: 2px 8px; border-radius: 4px; vertical-align: middle; margin-left: 10px; font-weight: 600;"><i class="ph ph-map-pin"></i> ${horarioUbicacion}</span>` : '';
+        window.Modal.show(`${actName} - ${horarioLabel}${titleTagUbicacion}`, formHtml, footerHtml);
 
         let tipoEspecialActual = 'Recuperación';
 
