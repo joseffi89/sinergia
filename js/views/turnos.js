@@ -841,7 +841,10 @@ window.ViewTurnos = {
             </div>
         ` : '';
 
+        const tagUbicacion = horarioUbicacion ? `<div style="margin-bottom: 15px;"><span style="font-size: 13px; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); color: var(--text-muted);"><i class="ph ph-map-pin"></i> ${horarioUbicacion}</span></div>` : '';
+
         const formHtml = `
+            ${tagUbicacion}
             ${horarioInfoHtml}
             <div style="margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border);">
                 <div class="form-group" style="margin-bottom: 10px;">
@@ -880,8 +883,7 @@ window.ViewTurnos = {
             <button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>
         `;
 
-        const tagUbicacion = horarioUbicacion ? `<span style="font-size: 13px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 4px; vertical-align: middle; margin-left: 10px; font-weight: normal; border: 1px solid rgba(255,255,255,0.15);"><i class="ph ph-map-pin"></i> ${horarioUbicacion}</span>` : '';
-        window.Modal.show(`${actName} - ${horarioLabel}${tagUbicacion}`, formHtml, footerHtml);
+        window.Modal.show(`${actName} - ${horarioLabel}`, formHtml, footerHtml);
 
         let tipoEspecialActual = 'Recuperación';
 
