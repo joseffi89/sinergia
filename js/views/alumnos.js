@@ -69,12 +69,12 @@ window.ViewAlumnos = {
                 const displayName = alumnos.Apellido_y_Nombre ? alumnos.Apellido_y_Nombre[i] : `${alumnos.apellido[i]}, ${alumnos.nombre[i]}`;
 
                 rows += `
-                    <tr style="border-bottom: 1px solid var(--border);">
+                    <tr style="border-bottom: 1px solid var(--border); cursor: pointer;" onclick="window.ViewAlumnos.openPagosModal(${i})" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
                         <td style="padding: 12px; font-weight: 500;">${displayName}</td>
                         <td style="padding: 12px;"><span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 13px;">${planName}</span></td>
                         <td style="padding: 12px;"><span style="color: ${estadoColor}; font-weight: 600; font-size: 13px;">${estado}</span></td>
                         <td style="padding: 12px; text-align: right;">
-                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;" onclick="window.ViewAlumnos.openEditModal(${i})"><i class="ph ph-pencil-simple"></i></button>
+                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 16px;" onclick="event.stopPropagation(); window.ViewAlumnos.openEditModal(${i})"><i class="ph ph-pencil-simple"></i></button>
                         </td>
                     </tr>
                 `;
@@ -217,5 +217,82 @@ window.ViewAlumnos = {
                 btn.disabled = false;
             }
         });
+    },
+
+    async openPagosModal(index) {
+        const alumnos = this.currentData;
+        if (!alumnos || !alumnos.id) return;
+
+        const alumnoId = alumnos.id[index];
+        const displayName = alumnos.Apellido_y_Nombre ? alumnos.Apellido_y_Nombre[index] : `${alumnos.apellido[index]}, ${alumnos.nombre[index]}`;
+
+        window.Modal.show(`Historial de Pagos - ${displayName}`, '<div style="text-align:center; padding: 20px;"><i class="ph ph-spinner ph-spin" style="font-size: 24px; color: var(--text-muted);"></i></div>', '<button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>');
+
+        try {
+            const pagos = await GristData.getTable('Pagos');
+            let historial = [];
+
+            if (pagos && pagos.id) {
+                for (let i = 0; i < pagos.id.length; i++) {
+                    if (pagos.alumno_id[i] === alumnoId) {
+                        let fechaIso = '';
+                        if (typeof pagos.fecha_pago[i] === 'number') {
+                            fechaIso = new Date(pagos.fecha_pago[i] * 1000).toISOString().split('T')[0];
+                        } else if (typeof pagos.fecha_pago[i] === 'string') {
+                            fechaIso = pagos.fecha_pago[i].split('T')[0];
+                        }
+
+                        historial.push({
+                            id: pagos.id[i],
+                            periodo: pagos.mes_correspondiente[i] || '-',
+                            monto: parseFloat(pagos.monto_pagado[i]) || 0,
+                            fechaIso: fechaIso
+                        });
+                    }
+                }
+            }
+
+            // Order newest to oldest
+            historial.sort((a, b) => b.fechaIso.localeCompare(a.fechaIso));
+
+            let rows = '';
+            if (historial.length > 0) {
+                rows = historial.map(p => {
+                    const fechaStr = p.fechaIso ? p.fechaIso.split('-').reverse().join('/') : '-';
+                    return `
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 10px; font-weight: 500;">${p.periodo}</td>
+                            <td style="padding: 10px; font-variant-numeric: tabular-nums;">${fechaStr}</td>
+                            <td style="padding: 10px; font-weight: 600; color: var(--success); text-align: right;">$${p.monto}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } else {
+                rows = '<tr><td colspan="3" style="text-align:center; padding: 20px; color: var(--text-muted);">No hay pagos registrados para este alumno.</td></tr>';
+            }
+
+            const bodyHtml = `
+                <div class="card" style="overflow-x: auto; margin-bottom: 10px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); text-transform: uppercase; font-size: 11px;">
+                                <th style="padding: 10px;">Período</th>
+                                <th style="padding: 10px;">Fecha</th>
+                                <th style="padding: 10px; text-align: right;">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            window.Modal.show(`Pagos - ${displayName}`, bodyHtml, '<button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>');
+
+        } catch (e) {
+            console.error("Error al cargar historial de pagos", e);
+            window.Modal.show('Error', '<p style="color:var(--danger)">No se pudo cargar el historial.</p>', '<button class="btn btn-secondary" onclick="window.Modal.close()">Cerrar</button>');
+        }
     }
 };
