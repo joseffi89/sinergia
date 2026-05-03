@@ -4,6 +4,8 @@ window.ViewPagos = {
     pagosData: null,
     periodoActual: '',
     filtroTipoPlanes: [],
+    searchTerm: '',
+    filtroEstado: 'Todos',
 
     async render() {
         const container = document.getElementById('pagos-container');
@@ -53,6 +55,9 @@ window.ViewPagos = {
 
     aplicarFiltros() {
         this.periodoActual = document.getElementById('filtro-periodo').value;
+        this.searchTerm = (document.getElementById('filtro-pagos-alumno')?.value || '').toLowerCase();
+        this.filtroEstado = document.getElementById('filtro-pagos-estado')?.value || 'Todos';
+
         const checkboxes = document.querySelectorAll('.filtro-plan-chk');
         this.filtroTipoPlanes = [];
         checkboxes.forEach(chk => {
@@ -89,8 +94,11 @@ window.ViewPagos = {
         let totalActivos = 0;
         let totalACobrar = 0;
         let totalCobrado = 0;
-        const filas = [];
+        let totalPagosCount = 0;
+        let totalImpagosCount = 0;
+
         const hoyIso = new Date().toISOString().split('T')[0];
+        const alumnosProcesados = [];
 
         const pagosPorAlumno = {};
         if (this.pagosData && this.pagosData.id) {
@@ -102,7 +110,7 @@ window.ViewPagos = {
             }
         }
 
-        const planesMap = {}; // planId -> { nombre, tipo_plan, importe }
+        const planesMap = {}; // planId -> { nombre, tipo, importe }
         if (this.planesData && this.planesData.id) {
             for (let p = 0; p < this.planesData.id.length; p++) {
                 planesMap[this.planesData.id[p]] = {
@@ -115,66 +123,97 @@ window.ViewPagos = {
 
         if (this.alumnosData.id) {
             for (let i = 0; i < this.alumnosData.id.length; i++) {
-                if (this.alumnosData.estado[i] === 'Activo') {
-                    let fechaIngreso = this.alumnosData.fecha_ingreso[i];
-                    let fechaIso = '';
-                    if (typeof fechaIngreso === 'number') fechaIso = new Date(fechaIngreso * 1000).toISOString().split('T')[0];
-                    else if (typeof fechaIngreso === 'string') fechaIso = fechaIngreso.split('T')[0];
+                // Solo alumnos Activos
+                if (this.alumnosData.estado[i] !== 'Activo') continue;
 
-                    if (fechaIso && fechaIso.substring(0, 7) > this.periodoActual) continue;
+                let fechaIngreso = this.alumnosData.fecha_ingreso[i];
+                let fechaIso = '';
+                if (typeof fechaIngreso === 'number') fechaIso = new Date(fechaIngreso * 1000).toISOString().split('T')[0];
+                else if (typeof fechaIngreso === 'string') fechaIso = fechaIngreso.split('T')[0];
 
-                    const planId = this.alumnosData.plan_id[i];
-                    const planInfo = planesMap[planId] || { nombre: 'Sin Plan', tipo: '', importe: 0 };
+                // Solo alumnos que ingresaron antes o durante el periodo
+                if (fechaIso && fechaIso.substring(0, 7) > this.periodoActual) continue;
 
-                    // Filtrar por tipo_plan
-                    if (this.filtroTipoPlanes.length > 0 && !this.filtroTipoPlanes.includes(planInfo.tipo)) continue;
-                    totalActivos++;
-                    totalACobrar += planInfo.importe;
+                const planId = this.alumnosData.plan_id[i];
+                const planInfo = planesMap[planId] || { nombre: 'Sin Plan', tipo: '', importe: 0 };
 
-                    const pAlumno = pagosPorAlumno[this.alumnosData.id[i]] || 0;
-                    totalCobrado += pAlumno;
+                // Filtro por tipo de plan
+                if (this.filtroTipoPlanes.length > 0 && !this.filtroTipoPlanes.includes(planInfo.tipo)) continue;
 
-                    let estadoPago = '', colorEstado = '', bgEstado = '';
-                    let fechaVtoStr = this.calcularVencimiento(fechaIso, this.periodoActual);
+                const pAlumno = pagosPorAlumno[this.alumnosData.id[i]] || 0;
+                const displayName = this.alumnosData.Apellido_y_Nombre
+                    ? (this.alumnosData.Apellido_y_Nombre[i] || '-')
+                    : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
 
-                    if (pAlumno >= planInfo.importe && planInfo.importe > 0) {
-                        estadoPago = 'Pagado'; colorEstado = 'var(--success)'; bgEstado = 'rgba(46, 204, 113, 0.1)';
-                    } else if (planInfo.importe === 0) {
-                        estadoPago = 'S/ Cargo'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
+                // Filtro por búsqueda
+                if (this.searchTerm && !displayName.toLowerCase().includes(this.searchTerm)) continue;
+
+                let estadoPago = '', colorEstado = '', bgEstado = '', esPago = false;
+                let fechaVtoStr = this.calcularVencimiento(fechaIso, this.periodoActual);
+
+                if (pAlumno >= planInfo.importe && planInfo.importe > 0) {
+                    estadoPago = 'Pagado'; colorEstado = 'var(--success)'; bgEstado = 'rgba(46, 204, 113, 0.1)';
+                    esPago = true;
+                } else if (planInfo.importe === 0) {
+                    estadoPago = 'S/ Cargo'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
+                    esPago = true;
+                } else {
+                    if (!fechaVtoStr) {
+                        estadoPago = 'Sin Vto.'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
                     } else {
-                        if (!fechaVtoStr) {
-                            estadoPago = 'Sin Vto.'; colorEstado = 'var(--text-muted)'; bgEstado = 'rgba(255, 255, 255, 0.05)';
-                        } else {
-                            const diff = this.getDifferenceInDays(hoyIso, fechaVtoStr);
-                            if (diff < 0) { estadoPago = 'Vencido'; colorEstado = 'var(--danger)'; bgEstado = 'rgba(231, 76, 60, 0.1)'; }
-                            else if (diff <= 5) { estadoPago = 'Próx. a Vencer'; colorEstado = 'var(--warning)'; bgEstado = 'rgba(241, 196, 15, 0.1)'; }
-                            else { estadoPago = 'Pendiente'; colorEstado = '#aaa'; bgEstado = 'rgba(255, 255, 255, 0.05)'; }
-                        }
+                        const diff = this.getDifferenceInDays(hoyIso, fechaVtoStr);
+                        if (diff < 0) { estadoPago = 'Vencido'; colorEstado = 'var(--danger)'; bgEstado = 'rgba(231, 76, 60, 0.1)'; }
+                        else if (diff <= 5) { estadoPago = 'Próx. a Vencer'; colorEstado = 'var(--warning)'; bgEstado = 'rgba(241, 196, 15, 0.1)'; }
+                        else { estadoPago = 'Pendiente'; colorEstado = '#aaa'; bgEstado = 'rgba(255, 255, 255, 0.05)'; }
                     }
-
-                    const displayName = this.alumnosData.Apellido_y_Nombre
-                        ? (this.alumnosData.Apellido_y_Nombre[i] || '-')
-                        : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
-
-                    filas.push(`
-                        <tr style="border-bottom: 1px solid var(--border);">
-                            <td style="padding: 12px; font-weight: 500;">${displayName}</td>
-                            <td style="padding: 12px;">${planInfo.nombre}</td>
-                            <td style="padding: 12px; font-variant-numeric: tabular-nums;">${fechaVtoStr ? fechaVtoStr.split('-').reverse().join('/') : '-'}</td>
-                            <td style="padding: 12px; font-weight:600;">$${planInfo.importe}</td>
-                            <td style="padding: 12px; color: ${pAlumno >= planInfo.importe ? 'var(--success)' : 'inherit'}; font-weight:600;">$${pAlumno}</td>
-                            <td style="padding: 12px;">
-                                <span style="background: ${bgEstado}; color: ${colorEstado}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; border: 1px solid ${colorEstado}40;">
-                                    ${estadoPago}
-                                </span>
-                            </td>
-                        </tr>
-                    `);
                 }
+
+                // Filtro por estado
+                if (this.filtroEstado !== 'Todos') {
+                    if (this.filtroEstado === 'Pagado' && !esPago) continue;
+                    if (this.filtroEstado === 'Impago' && esPago) continue;
+                    if (this.filtroEstado === 'Vencido' && estadoPago !== 'Vencido') continue;
+                }
+
+                // Acumular KPIs
+                totalActivos++;
+                totalACobrar += planInfo.importe;
+                totalCobrado += pAlumno;
+                if (esPago) totalPagosCount++;
+                else totalImpagosCount++;
+
+                alumnosProcesados.push({
+                    displayName,
+                    planNombre: planInfo.nombre,
+                    vencimiento: fechaVtoStr,
+                    cuota: planInfo.importe,
+                    pagado: pAlumno,
+                    estadoPago,
+                    colorEstado,
+                    bgEstado
+                });
             }
         }
 
-        // Checkboxes de tipo_plan (valores únicos)
+        // Ordenar alfabéticamente por nombre
+        alumnosProcesados.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        const filasHtml = alumnosProcesados.map(a => `
+            <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 12px; font-weight: 500;">${a.displayName}</td>
+                <td style="padding: 12px;">${a.planNombre}</td>
+                <td style="padding: 12px; font-variant-numeric: tabular-nums;">${a.vencimiento ? a.vencimiento.split('-').reverse().join('/') : '-'}</td>
+                <td style="padding: 12px; font-weight:600;">$${a.cuota}</td>
+                <td style="padding: 12px; color: ${a.pagado >= a.cuota ? 'var(--success)' : 'inherit'}; font-weight:600;">$${a.pagado}</td>
+                <td style="padding: 12px;">
+                    <span style="background: ${a.bgEstado}; color: ${a.colorEstado}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; border: 1px solid ${a.colorEstado}40;">
+                        ${a.estadoPago}
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+
+        // Checkboxes de tipo_plan
         const tiposUnicos = [...new Set(Object.values(planesMap).map(p => p.tipo).filter(t => t))];
         tiposUnicos.sort();
         let planCheckboxesHtml = '';
@@ -189,37 +228,68 @@ window.ViewPagos = {
         });
 
         container.innerHTML = `
-            <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
-                <div class="kpi-card" style="background: var(--bg-card); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 15px;">
-                    <i class="ph ph-users" style="font-size: 32px; color: var(--primary);"></i>
+            <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                <div class="kpi-card" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 12px;">
+                    <i class="ph ph-users" style="font-size: 28px; color: var(--primary);"></i>
                     <div>
-                        <div style="font-size: 13px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Alumnos Activos</div>
-                        <div style="font-size: 24px; font-weight: 700;">${totalActivos}</div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Activos</div>
+                        <div style="font-size: 20px; font-weight: 700;">${totalActivos}</div>
                     </div>
                 </div>
-                <div class="kpi-card" style="background: var(--bg-card); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 15px;">
-                    <i class="ph ph-receipt" style="font-size: 32px; color: var(--text-muted);"></i>
+                <div class="kpi-card" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 12px;">
+                    <i class="ph ph-check-circle" style="font-size: 28px; color: var(--success);"></i>
                     <div>
-                        <div style="font-size: 13px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Total a Cobrar</div>
-                        <div style="font-size: 24px; font-weight: 700;">$${totalACobrar}</div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Pagos</div>
+                        <div style="font-size: 20px; font-weight: 700;">${totalPagosCount}</div>
                     </div>
                 </div>
-                <div class="kpi-card" style="background: var(--bg-card); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); border-left: 4px solid var(--success); display:flex; align-items:center; gap: 15px;">
-                    <i class="ph ph-currency-dollar" style="font-size: 32px; color: var(--success);"></i>
+                <div class="kpi-card" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 12px;">
+                    <i class="ph ph-warning-circle" style="font-size: 28px; color: var(--danger);"></i>
                     <div>
-                        <div style="font-size: 13px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Total Cobrado</div>
-                        <div style="font-size: 24px; font-weight: 700;">$${totalCobrado}</div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Impagos</div>
+                        <div style="font-size: 20px; font-weight: 700;">${totalImpagosCount}</div>
+                    </div>
+                </div>
+                <div class="kpi-card" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); display:flex; align-items:center; gap: 12px;">
+                    <i class="ph ph-trend-up" style="font-size: 28px; color: var(--text-muted);"></i>
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">A Cobrar</div>
+                        <div style="font-size: 20px; font-weight: 700;">$${totalACobrar}</div>
+                    </div>
+                </div>
+                <div class="kpi-card" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); border-left: 4px solid var(--success); display:flex; align-items:center; gap: 12px;">
+                    <i class="ph ph-money" style="font-size: 28px; color: var(--success);"></i>
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-weight:600; text-transform:uppercase;">Cobrado</div>
+                        <div style="font-size: 20px; font-weight: 700;">$${totalCobrado}</div>
                     </div>
                 </div>
             </div>
 
             <div class="filters-panel" style="background: var(--bg-card); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 20px;">
-                <div style="display:flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                    <div style="min-width: 200px;">
+                <div style="display:flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;">
+                    <div style="min-width: 150px;">
                         <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px;">Período</label>
                         <input type="month" id="filtro-periodo" class="form-control" value="${this.periodoActual}" onchange="window.ViewPagos.aplicarFiltros()" style="background: rgba(0,0,0,0.2); border:1px solid var(--border); color:white;">
                     </div>
-                    <div style="flex: 1;">
+                    
+                    <div style="min-width: 200px; position:relative;">
+                        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px;">Buscar Alumno</label>
+                        <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; bottom:12px; color:var(--text-muted);"></i>
+                        <input type="text" id="filtro-pagos-alumno" class="form-control" placeholder="Nombre o apellido..." value="${this.searchTerm}" oninput="window.ViewPagos.aplicarFiltros()" style="background: rgba(0,0,0,0.2); border:1px solid var(--border); color:white; padding-left: 30px;">
+                    </div>
+
+                    <div style="min-width: 150px;">
+                        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px;">Estado Pago</label>
+                        <select id="filtro-pagos-estado" class="form-control" onchange="window.ViewPagos.aplicarFiltros()" style="background: rgba(0,0,0,0.2); border:1px solid var(--border); color:white;">
+                            <option value="Todos" ${this.filtroEstado === 'Todos' ? 'selected' : ''}>Todos</option>
+                            <option value="Pagado" ${this.filtroEstado === 'Pagado' ? 'selected' : ''}>Pagados</option>
+                            <option value="Impago" ${this.filtroEstado === 'Impago' ? 'selected' : ''}>Impagos</option>
+                            <option value="Vencido" ${this.filtroEstado === 'Vencido' ? 'selected' : ''}>Vencidos</option>
+                        </select>
+                    </div>
+
+                    <div style="flex: 1; min-width: 250px;">
                         <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px;">Filtrar por Plan</label>
                         <div style="display:flex; gap:15px; flex-wrap:wrap;">
                             ${planCheckboxesHtml || '<span style="font-size:13px; color:var(--text-muted);">No hay planes</span>'}
@@ -241,7 +311,7 @@ window.ViewPagos = {
                         </tr>
                     </thead>
                     <tbody>
-                        ${filas.length > 0 ? filas.join('') : '<tr><td colspan="6" style="text-align:center; padding: 20px; color: var(--text-muted);">No hay alumnos activos para este período.</td></tr>'}
+                        ${filasHtml || '<tr><td colspan="6" style="text-align:center; padding: 20px; color: var(--text-muted);">No se encontraron resultados con los filtros aplicados.</td></tr>'}
                     </tbody>
                 </table>
             </div>
