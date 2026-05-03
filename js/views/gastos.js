@@ -1,6 +1,7 @@
 window.ViewGastos = {
-    gastosData: null,
+    gastosPagados: null,
     categoriasData: null,
+    gastosVirtuales: [], // Solo los impagos en memoria
     periodoActual: '',
 
     async render() {
@@ -11,14 +12,15 @@ window.ViewGastos = {
             this.periodoActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // Usar caché para render inmediato
-        this.gastosData = GristData.getCached('Gastos_Mensuales');
+        // Cargar datos de Grist
+        this.gastosPagados = GristData.getCached('Gastos_Mensuales');
         this.categoriasData = GristData.getCached('Gastos_Categorias');
 
-        if (this.gastosData) {
+        if (this.gastosPagados) {
+            this.inicializarGastosVirtuales();
             this.renderDashboard();
         } else {
-            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando gastos...</p>';
+            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando datos...</p>';
         }
 
         try {
@@ -27,128 +29,175 @@ window.ViewGastos = {
                 GristData.getTable('Gastos_Categorias')
             ]);
 
-            this.gastosData = gastos;
+            this.gastosPagados = gastos;
             this.categoriasData = categorias;
+            
+            this.inicializarGastosVirtuales();
             this.renderDashboard();
 
         } catch (error) {
             console.error("Error en Vista Gastos:", error);
-            if (!this.gastosData) container.innerHTML = '<p style="color: var(--danger);">Error de conexión con la base de datos.</p>';
+            if (!this.gastosPagados) container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist.</p>';
         }
+    },
+
+    inicializarGastosVirtuales() {
+        // 1. Identificar gastos fijos históricos
+        const fijosHistoricos = new Map(); // nombre -> {monto, catId}
+        
+        // Identificar ID de categoria "Fijo"
+        let idFijo = null;
+        if (this.categoriasData && this.categoriasData.id) {
+            const idx = this.categoriasData.nombre_categoria.indexOf('Fijo');
+            if (idx !== -1) idFijo = this.categoriasData.id[idx];
+        }
+
+        if (this.gastosPagados && this.gastosPagados.id) {
+            for (let i = 0; i < this.gastosPagados.id.length; i++) {
+                const catId = this.gastosPagados.categoria_id[i];
+                // Si la categoría es Fijo (por ID o por nombre si no tenemos el mapeo aún)
+                if (catId === idFijo || (this.categoriasData && this.categoriasData.nombre_categoria[this.categoriasData.id.indexOf(catId)] === 'Fijo')) {
+                    const nombre = this.gastosPagados.nombre_gasto[i];
+                    const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
+                    // Guardamos el más reciente (o simplemente el último que encontremos)
+                    fijosHistoricos.set(nombre.toLowerCase(), { nombre, monto, catId: catId || idFijo });
+                }
+            }
+        }
+
+        // Si no hay ninguno, aseguramos Alquiler por defecto
+        if (fijosHistoricos.size === 0) {
+            fijosHistoricos.set('alquiler', { nombre: 'Alquiler', monto: 1000000, catId: idFijo || 1 });
+        }
+
+        // 2. Filtrar los que ya están pagados en el periodo actual
+        const pagadosEsteMes = new Set();
+        if (this.gastosPagados && this.gastosPagados.id) {
+            for (let i = 0; i < this.gastosPagados.id.length; i++) {
+                if (this.gastosPagados.periodo_mes[i] === this.periodoActual) {
+                    pagadosEsteMes.add(this.gastosPagados.nombre_gasto[i].toLowerCase());
+                }
+            }
+        }
+
+        // 3. Crear lista virtual de impagos fijos
+        const nuevosVirtuales = [];
+        fijosHistoricos.forEach((data, nombreKey) => {
+            if (!pagadosEsteMes.has(nombreKey)) {
+                nuevosVirtuales.push({
+                    tempId: 'fix-' + nombreKey,
+                    nombre: data.nombre,
+                    monto: data.monto,
+                    categoria: 'Fijo',
+                    categoria_id: data.catId
+                });
+            }
+        });
+
+        // 4. Mantener temporales que el usuario haya agregado manualmente en esta sesión (si los hubiera)
+        const temporalesManuales = this.gastosVirtuales.filter(v => v.categoria === 'Temporal' && !v.tempId.toString().startsWith('fix-'));
+        
+        this.gastosVirtuales = [...nuevosVirtuales, ...temporalesManuales];
     },
 
     renderDashboard() {
         const container = document.getElementById('gastos-container');
-        if (!this.gastosData) return;
+        if (!this.gastosPagados) return;
 
         let totalPagado = 0;
         let totalPendiente = 0;
-        const gastosPeriodo = [];
+        const listaFinal = [];
 
-        // Map categorias
         const catMap = {};
-        let idCategoriaFijo = 1;
         if (this.categoriasData && this.categoriasData.id) {
             this.categoriasData.id.forEach((cid, i) => {
-                const name = this.categoriasData.nombre_categoria[i];
-                catMap[cid] = name;
-                if (name === 'Fijo') idCategoriaFijo = cid;
+                catMap[cid] = this.categoriasData.nombre_categoria[i];
             });
         }
 
-        // Procesar gastos reales
-        if (this.gastosData.id) {
-            for (let i = 0; i < this.gastosData.id.length; i++) {
-                if (this.gastosData.periodo_mes[i] === this.periodoActual) {
-                    const monto = parseFloat(this.gastosData.monto[i]) || 0;
-                    const pagado = this.gastosData.fecha_pago && this.gastosData.fecha_pago[i];
-                    
-                    if (pagado) totalPagado += monto;
-                    else totalPendiente += monto;
-
-                    gastosPeriodo.push({
-                        id: this.gastosData.id[i],
-                        categoria_id: this.gastosData.categoria_id[i],
-                        categoria: catMap[this.gastosData.categoria_id[i]] || 'General',
-                        nombre: this.gastosData.nombre_gasto[i] || 'Sin nombre',
+        // 1. Gastos Reales (Grist)
+        if (this.gastosPagados.id) {
+            for (let i = 0; i < this.gastosPagados.id.length; i++) {
+                if (this.gastosPagados.periodo_mes[i] === this.periodoActual) {
+                    const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
+                    totalPagado += monto;
+                    listaFinal.push({
+                        id: this.gastosPagados.id[i],
+                        nombre: this.gastosPagados.nombre_gasto[i],
                         monto: monto,
-                        fecha_pago: pagado,
-                        isVirtual: false
+                        categoria: catMap[this.gastosPagados.categoria_id[i]] || 'General',
+                        fecha_pago: this.gastosPagados.fecha_pago[i],
+                        estado: 'Pagado'
                     });
                 }
             }
         }
 
-        // Inyectar Gasto Fijo: Alquiler (si no existe ya en este período)
-        const existeAlquiler = gastosPeriodo.some(g => g.nombre.toLowerCase() === 'alquiler');
-        if (!existeAlquiler) {
-            const montoAlquiler = 1000000;
-            totalPendiente += montoAlquiler;
-            gastosPeriodo.push({
-                id: null, // Virtual
-                categoria_id: idCategoriaFijo,
-                categoria: 'Fijo',
-                nombre: 'Alquiler',
-                monto: montoAlquiler,
+        // 2. Gastos Virtuales (Pendientes)
+        this.gastosVirtuales.forEach(gv => {
+            totalPendiente += gv.monto;
+            listaFinal.push({
+                tempId: gv.tempId,
+                nombre: gv.nombre,
+                monto: gv.monto,
+                categoria: gv.categoria,
+                categoria_id: gv.categoria_id,
                 fecha_pago: null,
-                isVirtual: true
+                estado: 'Impago'
             });
-        }
-
-        // Ordenar: Pendientes primero
-        gastosPeriodo.sort((a, b) => {
-            if (!!a.fecha_pago !== !!b.fecha_pago) return a.fecha_pago ? 1 : -1;
-            return a.nombre.localeCompare(b.nombre);
         });
 
-        const filasHtml = gastosPeriodo.map(g => {
-            const isPagado = !!g.fecha_pago;
-            return `
-                <tr style="border-bottom: 1px solid var(--border); ${g.isVirtual ? 'opacity: 0.8;' : ''}">
-                    <td style="padding: 12px;">
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); margin-right: 8px; text-transform: uppercase;">
-                            ${g.categoria}
-                        </span>
-                        <span style="font-weight: 500;">${g.nombre} ${g.isVirtual ? '<small style="color:var(--text-muted); font-style:italic;">(Base)</small>' : ''}</span>
-                    </td>
-                    <td style="padding: 12px; font-weight: 600;">$${g.monto.toLocaleString()}</td>
-                    <td style="padding: 12px;">
-                        ${isPagado ? 
-                            `<span style="color: var(--success); font-size: 13px; font-weight: 600;"><i class="ph ph-check-circle"></i> ${g.fecha_pago.split('-').reverse().join('/')}</span>` : 
-                            `<span style="color: var(--danger); font-size: 13px; font-weight: 600;"><i class="ph ph-clock"></i> Impago</span>`
-                        }
-                    </td>
-                    <td style="padding: 12px; text-align: right;">
-                        ${!isPagado ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.pagarGasto(${g.id}, '${g.nombre}', ${g.monto}, ${g.categoria_id})"><i class="ph ph-hand-coins"></i> Pagar</button>` : ''}
-                        <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px;" onclick="window.ViewGastos.editarGasto(${g.id}, '${g.nombre}', ${g.monto}, ${g.categoria_id})"><i class="ph ph-pencil-simple"></i></button>
-                        <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px; color: var(--danger);" onclick="window.ViewGastos.eliminarGasto(${g.id}, ${g.isVirtual})"><i class="ph ph-trash"></i></button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        // Ordenar: Impagos arriba
+        listaFinal.sort((a, b) => (a.estado === 'Impago' ? -1 : 1));
+
+        const filasHtml = listaFinal.map(g => `
+            <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 12px;">
+                    <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); margin-right: 8px;">
+                        ${g.categoria}
+                    </span>
+                    <span style="font-weight: 500;">${g.nombre}</span>
+                </td>
+                <td style="padding: 12px; font-weight: 600;">$${g.monto.toLocaleString()}</td>
+                <td style="padding: 12px;">
+                    ${g.fecha_pago ? 
+                        `<span style="color: var(--success); font-size: 13px; font-weight: 600;"><i class="ph ph-check-circle"></i> ${g.fecha_pago.split('-').reverse().join('/')}</span>` : 
+                        `<span style="color: var(--danger); font-size: 13px; font-weight: 600;"><i class="ph ph-clock"></i> Impago</span>`
+                    }
+                </td>
+                <td style="padding: 12px; text-align: right;">
+                    ${g.estado === 'Impago' ? `
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.confirmarPagoVirtual('${g.tempId}')"><i class="ph ph-hand-coins"></i> Pagar</button>
+                        <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px;" onclick="window.ViewGastos.editarVirtual('${g.tempId}')"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px; color: var(--danger);" onclick="window.ViewGastos.eliminarVirtual('${g.tempId}')"><i class="ph ph-trash"></i></button>
+                    ` : `
+                        <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px; color: var(--danger);" onclick="window.ViewGastos.eliminarReal(${g.id})"><i class="ph ph-trash"></i></button>
+                    `}
+                </td>
+            </tr>
+        `).join('');
 
         container.innerHTML = `
             <div class="kpi-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px;">
                 <div class="kpi-card" style="background: var(--bg-card); border-left: 4px solid var(--success);">
                     <i class="ph ph-check-square" style="color: var(--success);"></i>
                     <div class="kpi-data">
-                        <h3>Total Pagado</h3>
+                        <h3>Pagado</h3>
                         <p>$${totalPagado.toLocaleString()}</p>
                     </div>
                 </div>
                 <div class="kpi-card" style="background: var(--bg-card); border-left: 4px solid var(--danger);">
                     <i class="ph ph-clock-afternoon" style="color: var(--danger);"></i>
                     <div class="kpi-data">
-                        <h3>Total Pendiente</h3>
+                        <h3>Pendiente</h3>
                         <p>$${totalPendiente.toLocaleString()}</p>
                     </div>
                 </div>
             </div>
 
-            <div class="view-header" style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center; background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+            <div class="view-header" style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; gap: 15px; align-items:center;">
-                    <label style="font-size: 13px; color: var(--text-muted);">Período:</label>
-                    <input type="month" id="filtro-gastos-periodo" class="form-control" value="${this.periodoActual}" onchange="window.ViewGastos.cambiarPeriodo(this.value)" style="width: auto; background: var(--bg-dark); color: white; border: 1px solid var(--border);">
+                    <input type="month" id="filtro-gastos-periodo" class="form-control" value="${this.periodoActual}" onchange="window.ViewGastos.cambiarPeriodo(this.value)" style="width: auto; background: var(--bg-card); color: white; border: 1px solid var(--border);">
                 </div>
                 <button class="btn btn-primary" onclick="window.ViewGastos.openNuevoGastoModal()"><i class="ph ph-plus"></i> Registrar Gasto</button>
             </div>
@@ -156,15 +205,15 @@ window.ViewGastos = {
             <div class="card" style="overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                     <thead>
-                        <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">
-                            <th style="padding: 12px;">Concepto / Categoría</th>
+                        <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 12px; text-transform: uppercase;">
+                            <th style="padding: 12px;">Concepto</th>
                             <th style="padding: 12px;">Monto</th>
                             <th style="padding: 12px;">Estado</th>
                             <th style="padding: 12px; text-align:right;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${filasHtml}
+                        ${filasHtml || '<tr><td colspan="4" style="text-align:center; padding: 20px; color: var(--text-muted);">Sin gastos registrados</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -176,151 +225,132 @@ window.ViewGastos = {
         this.render();
     },
 
-    async _asegurarGastoReal(id, nombre, monto, categoria_id) {
-        if (id) return id; // Ya es real
-        
-        // Es virtual, crearlo en Grist
-        try {
-            const res = await GristData.addRecord('Gastos_Mensuales', {
-                nombre_gasto: nombre,
-                monto: monto,
-                categoria_id: categoria_id || 1,
-                periodo_mes: this.periodoActual,
-                esta_pagado: false
-            });
-            // El ID devuelto por applyUserActions suele estar en res[0] o similar, 
-            // pero para simplificar recargamos los datos
-            this.gastosData = await GristData.getTable('Gastos_Mensuales');
-            
-            // Buscar el ID recién creado
-            const newIdx = this.gastosData.id.length - 1;
-            return this.gastosData.id[newIdx];
-        } catch (e) {
-            console.error("Error al materializar gasto virtual:", e);
-            throw e;
-        }
-    },
-
     openNuevoGastoModal() {
-        let catOptions = '';
-        if (this.categoriasData && this.categoriasData.id) {
-            this.categoriasData.id.forEach((id, i) => {
-                catOptions += `<option value="${id}">${this.categoriasData.nombre_categoria[i]}</option>`;
-            });
-        } else {
-            catOptions = '<option value="1">Fijo</option><option value="2">Temporal</option>';
-        }
-
         const formHtml = `
             <div class="form-group">
                 <label>Categoría</label>
-                <select id="gasto-categoria" class="form-control">${catOptions}</select>
+                <select id="gasto-categoria" class="form-control">
+                    <option value="Fijo">Fijo</option>
+                    <option value="Temporal" selected>Temporal</option>
+                </select>
             </div>
             <div class="form-group">
                 <label>Descripción</label>
-                <input type="text" id="gasto-nombre" class="form-control" placeholder="Ej. Luz, Internet...">
+                <input type="text" id="gasto-nombre" class="form-control" placeholder="Ej. Internet, Luz...">
             </div>
             <div class="form-group">
                 <label>Monto ($)</label>
-                <input type="number" id="gasto-monto" class="form-control" placeholder="0.00">
+                <input type="number" id="gasto-monto" class="form-control" placeholder="0">
             </div>
         `;
 
         const footerHtml = `
             <button class="btn btn-secondary" onclick="window.Modal.close()">Cancelar</button>
-            <button class="btn btn-primary" id="btn-save-gasto">Guardar</button>
+            <button class="btn btn-primary" id="btn-add-virtual">Agregar a la lista</button>
         `;
 
-        window.Modal.show('Registrar Gasto', formHtml, footerHtml);
+        window.Modal.show('Nuevo Gasto (Pendiente)', formHtml, footerHtml);
 
-        document.getElementById('btn-save-gasto').addEventListener('click', async () => {
-            const data = {
-                categoria_id: parseInt(document.getElementById('gasto-categoria').value),
-                nombre_gasto: document.getElementById('gasto-nombre').value.trim(),
-                monto: parseFloat(document.getElementById('gasto-monto').value),
-                periodo_mes: this.periodoActual,
-                esta_pagado: false
-            };
+        document.getElementById('btn-add-virtual').addEventListener('click', () => {
+            const nombre = document.getElementById('gasto-nombre').value.trim();
+            const monto = parseFloat(document.getElementById('gasto-monto').value);
+            const categoria = document.getElementById('gasto-categoria').value;
 
-            if (!data.nombre_gasto || isNaN(data.monto)) {
-                alert('Complete los campos obligatorios.');
-                return;
+            if (!nombre || isNaN(monto)) return alert('Complete los datos.');
+
+            // Si es fijo, buscamos el ID de categoría real para que se guarde bien luego
+            let catId = categoria;
+            if (categoria === 'Fijo' && this.categoriasData && this.categoriasData.id) {
+                const idx = this.categoriasData.nombre_categoria.indexOf('Fijo');
+                if (idx !== -1) catId = this.categoriasData.id[idx];
             }
 
-            try {
-                await GristData.addRecord('Gastos_Mensuales', data);
-                window.Modal.close();
-                this.render();
-            } catch (e) {
-                alert('Error al guardar en Grist.');
-            }
+            this.gastosVirtuales.push({
+                tempId: Date.now(),
+                nombre,
+                monto,
+                categoria,
+                categoria_id: catId
+            });
+
+            window.Modal.close();
+            this.render();
         });
     },
 
-    async pagarGasto(id, nombre, monto, catId) {
-        if (!confirm(`¿Registrar pago de ${nombre} por $${monto.toLocaleString()}?`)) return;
-        
-        try {
-            const realId = await this._asegurarGastoReal(id, nombre, monto, catId);
-            const hoy = new Date().toISOString().split('T')[0];
-            await GristData.updateRecord('Gastos_Mensuales', realId, {
-                fecha_pago: hoy,
-                esta_pagado: true
-            });
-            this.render();
-        } catch (e) {
-            alert('Error al procesar el pago.');
-        }
-    },
+    editarVirtual(tempId) {
+        const g = this.gastosVirtuales.find(v => v.tempId === tempId);
+        if (!g) return;
 
-    async editarGasto(id, nombre, monto, catId) {
         const formHtml = `
             <div class="form-group">
                 <label>Descripción</label>
-                <input type="text" id="edit-gasto-nombre" class="form-control" value="${nombre}">
+                <input type="text" id="edit-v-nombre" class="form-control" value="${g.nombre}">
             </div>
             <div class="form-group">
                 <label>Monto ($)</label>
-                <input type="number" id="edit-gasto-monto" class="form-control" value="${monto}">
+                <input type="number" id="edit-v-monto" class="form-control" value="${g.monto}">
             </div>
         `;
 
         const footerHtml = `
             <button class="btn btn-secondary" onclick="window.Modal.close()">Cancelar</button>
-            <button class="btn btn-primary" id="btn-update-gasto">Actualizar</button>
+            <button class="btn btn-primary" id="btn-update-virtual">Actualizar</button>
         `;
 
-        window.Modal.show('Editar Gasto', formHtml, footerHtml);
+        window.Modal.show('Editar Gasto Pendiente', formHtml, footerHtml);
 
-        document.getElementById('btn-update-gasto').addEventListener('click', async () => {
-            const newNombre = document.getElementById('edit-gasto-nombre').value.trim();
-            const newMonto = parseFloat(document.getElementById('edit-gasto-monto').value);
-
-            try {
-                const realId = await this._asegurarGastoReal(id, nombre, monto, catId);
-                await GristData.updateRecord('Gastos_Mensuales', realId, {
-                    nombre_gasto: newNombre,
-                    monto: newMonto
-                });
-                window.Modal.close();
-                this.render();
-            } catch (e) {
-                alert('Error al actualizar.');
-            }
+        document.getElementById('btn-update-virtual').addEventListener('click', () => {
+            g.nombre = document.getElementById('edit-v-nombre').value.trim();
+            g.monto = parseFloat(document.getElementById('edit-v-monto').value);
+            window.Modal.close();
+            this.render();
         });
     },
 
-    async eliminarGasto(id, isVirtual) {
-        if (isVirtual) {
-            alert("Este es un gasto base sugerido. Si no desea pagarlo, simplemente ignórelo.");
-            return;
+    eliminarVirtual(tempId) {
+        this.gastosVirtuales = this.gastosVirtuales.filter(v => v.tempId !== tempId);
+        this.render();
+    },
+
+    async confirmarPagoVirtual(tempId) {
+        const g = this.gastosVirtuales.find(v => v.tempId === tempId);
+        if (!g) return;
+
+        if (!confirm(`¿Confirmar pago de "${g.nombre}" por $${g.monto.toLocaleString()}?`)) return;
+
+        const data = {
+            categoria_id: g.categoria_id || g.categoria,
+            nombre_gasto: g.nombre,
+            periodo_mes: this.periodoActual,
+            monto: g.monto,
+            fecha_pago: new Date().toISOString().split('T')[0]
+        };
+
+        try {
+            await GristData.addRecord('Gastos_Mensuales', data);
+            
+            // Eliminar de virtuales localmente
+            this.gastosVirtuales = this.gastosVirtuales.filter(v => v.tempId !== tempId);
+            
+            // Forzar recarga de Grist
+            this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
+            this.render();
+            alert('Pago registrado con éxito.');
+        } catch (e) {
+            console.error(e);
+            alert('Error al guardar en Grist.');
         }
-        if (!confirm('¿Eliminar este registro de gasto?')) return;
+    },
+
+    async eliminarReal(id) {
+        if (!confirm('¿Eliminar este registro permanente de Grist?')) return;
         try {
             await GristData.deleteRecord('Gastos_Mensuales', id);
+            this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
             this.render();
         } catch (e) {
-            alert('Error al eliminar.');
+            alert('Error al eliminar de Grist.');
         }
     }
 };
