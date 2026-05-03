@@ -47,33 +47,39 @@ const App = {
                 const hoy = new Date().toISOString().split('T')[0];
 
                 const formHtml = `
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="al-nombre" class="form-control" placeholder="Ej. Juan">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Apellido *</label>
+                            <input type="text" id="al-apellido" class="form-control" placeholder="Pérez">
+                        </div>
+                        <div class="form-group">
+                            <label>Nombre *</label>
+                            <input type="text" id="al-nombre" class="form-control" placeholder="Juan">
+                        </div>
+                        <div class="form-group" style="flex: 0 0 120px;">
+                            <label>DNI</label>
+                            <input type="text" id="al-dni" class="form-control" placeholder="123...">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Apellido *</label>
-                        <input type="text" id="al-apellido" class="form-control" placeholder="Ej. Pérez">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Teléfono</label>
+                            <input type="text" id="al-telefono" class="form-control" placeholder="11 1234 5678">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="al-email" class="form-control" placeholder="juan@ejemplo.com">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>DNI</label>
-                        <input type="text" id="al-dni" class="form-control" placeholder="Ej. 12345678">
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="al-email" class="form-control" placeholder="Ej. juan@ejemplo.com">
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha de Ingreso</label>
-                        <input type="date" id="al-fecha-ingreso" class="form-control" value="${hoy}">
-                    </div>
-                    <div class="form-group">
-                        <label>Plan *</label>
-                        <select id="al-plan" class="form-control">${options}</select>
-                    </div>
-                    <div class="form-group">
-                        <label>Teléfono</label>
-                        <input type="text" id="al-telefono" class="form-control" placeholder="Ej. 11 1234 5678">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Fecha de Ingreso</label>
+                            <input type="date" id="al-fecha-ingreso" class="form-control" value="${hoy}">
+                        </div>
+                        <div class="form-group">
+                            <label>Plan *</label>
+                            <select id="al-plan" class="form-control">${options}</select>
+                        </div>
                     </div>
                 `;
                 const footerHtml = `

@@ -311,7 +311,7 @@ body {
 .modal {
     background-color: var(--bg-card);
     width: 90%;
-    max-width: 500px;
+    max-width: 600px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     transform: translateY(-20px);
@@ -366,6 +366,17 @@ body {
 /* Forms */
 .form-group {
     margin-bottom: 15px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.form-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
 }
 
 .form-group label {

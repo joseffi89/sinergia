@@ -160,40 +160,46 @@ window.ViewAlumnos = {
         } catch (e) { }
 
         const formHtml = `
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" id="edit-al-nombre" class="form-control" value="${nombre}">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Apellido *</label>
+                    <input type="text" id="edit-al-apellido" class="form-control" value="${apellido}">
+                </div>
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="edit-al-nombre" class="form-control" value="${nombre}">
+                </div>
+                <div class="form-group" style="flex: 0 0 120px;">
+                    <label>DNI</label>
+                    <input type="text" id="edit-al-dni" class="form-control" value="${dni}">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Apellido *</label>
-                <input type="text" id="edit-al-apellido" class="form-control" value="${apellido}">
+            <div class="form-row">
+                <div class="form-group" style="flex: 0 0 120px;">
+                    <label>Estado</label>
+                    <select id="edit-al-estado" class="form-control">
+                        <option value="Activo" ${estado === 'Activo' ? 'selected' : ''}>Activo</option>
+                        <option value="Inactivo" ${estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="text" id="edit-al-telefono" class="form-control" value="${telefono}">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-al-email" class="form-control" value="${email}">
+                </div>
             </div>
-            <div class="form-group">
-                <label>DNI</label>
-                <input type="text" id="edit-al-dni" class="form-control" value="${dni}">
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="edit-al-email" class="form-control" value="${email}">
-            </div>
-            <div class="form-group">
-                <label>Fecha de Ingreso</label>
-                <input type="date" id="edit-al-fecha" class="form-control" value="${fecha_ingreso}">
-            </div>
-            <div class="form-group">
-                <label>Plan *</label>
-                <select id="edit-al-plan" class="form-control">${options}</select>
-            </div>
-            <div class="form-group">
-                <label>Teléfono</label>
-                <input type="text" id="edit-al-telefono" class="form-control" value="${telefono}">
-            </div>
-            <div class="form-group">
-                <label>Estado</label>
-                <select id="edit-al-estado" class="form-control">
-                    <option value="Activo" ${estado === 'Activo' ? 'selected' : ''}>Activo</option>
-                    <option value="Inactivo" ${estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Fecha de Ingreso</label>
+                    <input type="date" id="edit-al-fecha" class="form-control" value="${fecha_ingreso}">
+                </div>
+                <div class="form-group">
+                    <label>Plan *</label>
+                    <select id="edit-al-plan" class="form-control">${options}</select>
+                </div>
             </div>
         `;
 
