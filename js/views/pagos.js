@@ -91,6 +91,11 @@ window.ViewPagos = {
         const container = document.getElementById('pagos-container');
         if (!this.alumnosData) return;
 
+        // Guardar foco y posición del cursor
+        const activeElementId = document.activeElement ? document.activeElement.id : null;
+        const selectionStart = document.activeElement ? document.activeElement.selectionStart : null;
+        const selectionEnd = document.activeElement ? document.activeElement.selectionEnd : null;
+
         let totalActivos = 0;
         let totalACobrar = 0;
         let totalCobrado = 0;
@@ -281,7 +286,7 @@ window.ViewPagos = {
 
                     <div style="min-width: 150px;">
                         <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px;">Estado Pago</label>
-                        <select id="filtro-pagos-estado" class="form-control" onchange="window.ViewPagos.aplicarFiltros()" style="background: rgba(0,0,0,0.2); border:1px solid var(--border); color:white;">
+                        <select id="filtro-pagos-estado" class="form-control" onchange="window.ViewPagos.aplicarFiltros()" style="background: rgba(0,0,0,0.2); border:1px solid var(--border); color:white; color-scheme: dark;">
                             <option value="Todos" ${this.filtroEstado === 'Todos' ? 'selected' : ''}>Todos</option>
                             <option value="Pagado" ${this.filtroEstado === 'Pagado' ? 'selected' : ''}>Pagados</option>
                             <option value="Impago" ${this.filtroEstado === 'Impago' ? 'selected' : ''}>Impagos</option>
@@ -316,5 +321,16 @@ window.ViewPagos = {
                 </table>
             </div>
         `;
+
+        // Restaurar foco y selección
+        if (activeElementId) {
+            const el = document.getElementById(activeElementId);
+            if (el) {
+                el.focus();
+                if (selectionStart !== null && selectionEnd !== null && el.setSelectionRange) {
+                    el.setSelectionRange(selectionStart, selectionEnd);
+                }
+            }
+        }
     }
 };

@@ -676,11 +676,11 @@ window.ViewTurnos = {
         });
     },
 
-    getAlumnoPagoStatus(alumnoId) {
-        if (!this.pagosData || !this.planesData || !this.alumnosData) return 'var(--text-muted)';
+    getAlumnoPagoStatus(alumnoId, periodYyyyMm = null) {
+        if (!this.pagosData || !this.planesData || !this.alumnosData) return { color: 'var(--text-muted)', label: 'Sin Datos', vencimiento: null, importe: 0 };
 
         let aIdx = this.alumnosData.id.indexOf(alumnoId);
-        if (aIdx === -1) return 'var(--text-muted)';
+        if (aIdx === -1) return { color: 'var(--text-muted)', label: 'No Encontrado', vencimiento: null, importe: 0 };
 
         const planId = this.alumnosData.plan_id[aIdx];
         let importePlan = 0;
@@ -690,7 +690,7 @@ window.ViewTurnos = {
         }
 
         const now = new Date();
-        const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentPeriod = periodYyyyMm || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const hoyIso = now.toISOString().split('T')[0];
 
         let pagado = 0;
@@ -701,9 +701,6 @@ window.ViewTurnos = {
                 }
             }
         }
-
-        if (pagado >= importePlan && importePlan > 0) return 'var(--success)';
-        if (importePlan === 0) return 'var(--text-muted)';
 
         let fechaIngresoIso = this.alumnosData.fecha_ingreso[aIdx];
         let dia = 1;
@@ -720,13 +717,16 @@ window.ViewTurnos = {
         if (dia > maxDaysInMonth) dia = maxDaysInMonth;
         const vtoStr = `${year}-${month}-${String(dia).padStart(2, '0')}`;
 
+        if (pagado >= importePlan && importePlan > 0) return { color: 'var(--success)', label: 'Pagado', vencimiento: vtoStr, importe: importePlan };
+        if (importePlan === 0) return { color: 'var(--text-muted)', label: 'S/ Cargo', vencimiento: vtoStr, importe: 0 };
+
         const d1 = new Date(hoyIso + 'T00:00:00');
         const d2 = new Date(vtoStr + 'T00:00:00');
         const diffDays = Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 
-        if (diffDays < 0) return 'var(--danger)'; // Vencido
-        if (diffDays <= 5) return 'var(--warning)'; // Proximo a vencer
-        return '#aaa'; // Pendiente
+        if (diffDays < 0) return { color: 'var(--danger)', label: 'Vencido', vencimiento: vtoStr, importe: importePlan };
+        if (diffDays <= 5) return { color: 'var(--warning)', label: 'Próx. a Vencer', vencimiento: vtoStr, importe: importePlan };
+        return { color: '#aaa', label: 'Pendiente', vencimiento: vtoStr, importe: importePlan };
     },
 
     async openGestionClaseModal(horarioBaseId, actId, actName, horarioLabel) {
@@ -759,7 +759,7 @@ window.ViewTurnos = {
                         badge = '<span style="background: var(--danger); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; margin-left: 8px;">Excep.</span>';
                     }
 
-                    const colorPago = this.getAlumnoPagoStatus(alumnoId);
+                    const colorPago = this.getAlumnoPagoStatus(alumnoId).color;
                     const circleHtml = `<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${colorPago}; margin-right:8px; flex-shrink:0;" title="Estado de Pago Actual"></span>`;
 
                     enrolled.push({ id: this.reservasData.id[i], name: alumnoName, badge, circle: circleHtml });
@@ -940,39 +940,53 @@ window.ViewTurnos = {
     },
 
     getPagosHtml() {
-        // Build sorted list using Apellido_y_Nombre
+        // Build sorted list for datalist
         let alumnosActivos = [];
         if (this.alumnosData && this.alumnosData.id) {
             this.alumnosData.id.forEach((aid, i) => {
                 if (this.alumnosData.estado[i] !== 'Inactivo') {
-                    const planId = this.alumnosData.plan_id ? this.alumnosData.plan_id[i] : null;
-                    let importePlan = 0;
-                    if (planId && this.planesData && this.planesData.id) {
-                        const planIdx = this.planesData.id.indexOf(planId);
-                        if (planIdx !== -1) importePlan = this.planesData.importe[planIdx] || 0;
-                    }
                     const displayName = this.alumnosData.Apellido_y_Nombre
                         ? (this.alumnosData.Apellido_y_Nombre[i] || `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`)
                         : `${this.alumnosData.apellido[i]}, ${this.alumnosData.nombre[i]}`;
-                    alumnosActivos.push({ aid, importePlan, displayName });
+                    alumnosActivos.push({ aid, displayName });
                 }
             });
         }
         alumnosActivos.sort((a, b) => a.displayName.localeCompare(b.displayName));
-        let options = '<option value="">Seleccione un alumno...</option>' +
-            alumnosActivos.map(a => `<option value="${a.aid}" data-importe="${a.importePlan}">${a.displayName}</option>`).join('');
+        
+        let datalist = '<datalist id="dl-alumnos-pagos">' + 
+            alumnosActivos.map(a => `<option value="${a.displayName}" data-id="${a.aid}"></option>`).join('') + 
+            '</datalist>';
 
         const today = new Date().toISOString().split('T')[0];
 
         return `
-            <div class="card" style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h3 style="margin-bottom: 20px; font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">Registrar Pago</h3>
+            <div class="card" style="max-width: 650px; margin: 0 auto; padding: 25px;">
+                <h3 style="margin-bottom: 25px; font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px; color: var(--primary);">
+                    <i class="ph ph-currency-dollar-simple"></i> Registrar Pago
+                </h3>
                 
-                <div class="form-group">
-                    <label>Alumno</label>
-                    <select id="pago-alumno" class="form-control">
-                        ${options}
-                    </select>
+                <div class="form-group" style="position:relative;">
+                    <label style="font-weight:600;">Alumno</label>
+                    <div style="position:relative;">
+                        <i class="ph ph-user" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);"></i>
+                        <input type="text" id="pago-alumno-input" list="dl-alumnos-pagos" class="form-control" placeholder="Escribe el nombre del alumno..." style="padding-left: 35px;">
+                    </div>
+                    ${datalist}
+                    <input type="hidden" id="pago-alumno-id">
+                </div>
+
+                <div id="info-pago-alumno" style="display:none; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div style="font-size: 13px;">
+                            <div style="color: var(--text-muted); margin-bottom: 4px;">Vencimiento del Mes</div>
+                            <div id="info-vencimiento" style="font-weight: 600;">-</div>
+                        </div>
+                        <div style="font-size: 13px;">
+                            <div style="color: var(--text-muted); margin-bottom: 4px;">Estado Pago Anterior</div>
+                            <div id="info-pago-previo" style="font-weight: 600;">-</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div style="display:flex; gap:15px; margin-top: 15px;">
@@ -988,43 +1002,75 @@ window.ViewTurnos = {
 
                     <div class="form-group" style="flex:1;">
                         <label>Importe a Cobrar ($)</label>
-                        <input type="number" id="pago-importe" class="form-control" value="0" step="0.01">
+                        <input type="number" id="pago-importe" class="form-control" value="0" step="0.01" style="font-weight:700; color:var(--success);">
                     </div>
                 </div>
 
-                <div style="margin-top: 20px; text-align: right;">
-                    <button class="btn btn-primary" id="btn-guardar-pago"><i class="ph ph-check"></i> Confirmar Pago</button>
+                <div style="margin-top: 25px; text-align: right;">
+                    <button class="btn btn-primary" id="btn-guardar-pago" style="padding: 12px 24px;"><i class="ph ph-check"></i> Confirmar Pago</button>
                 </div>
             </div>
         `;
     },
 
     setupPagosEvents() {
-        const selectAlumno = document.getElementById('pago-alumno');
+        const inputAlumno = document.getElementById('pago-alumno-input');
+        const inputAlumnoId = document.getElementById('pago-alumno-id');
         const inputImporte = document.getElementById('pago-importe');
+        const inputMes = document.getElementById('pago-mes');
         const btnGuardar = document.getElementById('btn-guardar-pago');
+        const infoPanel = document.getElementById('info-pago-alumno');
 
-        if (selectAlumno) {
-            selectAlumno.addEventListener('change', (e) => {
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                if (selectedOption && selectedOption.value !== "") {
-                    const importe = selectedOption.getAttribute('data-importe');
-                    inputImporte.value = importe;
-                } else {
-                    inputImporte.value = 0;
-                }
-            });
+        const updateAlumnoInfo = () => {
+            const val = inputAlumno.value;
+            const mes = inputMes.value;
+            const option = document.querySelector(`#dl-alumnos-pagos option[value="${val}"]`);
+            
+            if (option && mes) {
+                const aid = parseInt(option.getAttribute('data-id'));
+                inputAlumnoId.value = aid;
+
+                // Calcular info actual
+                const statusActual = this.getAlumnoPagoStatus(aid, mes);
+                document.getElementById('info-vencimiento').innerText = statusActual.vencimiento ? statusActual.vencimiento.split('-').reverse().join('/') : '-';
+                inputImporte.value = statusActual.importe;
+
+                // Calcular info mes anterior
+                const [y, m] = mes.split('-');
+                let prevYear = parseInt(y), prevMonth = parseInt(m) - 1;
+                if (prevMonth === 0) { prevMonth = 12; prevYear--; }
+                const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+                const statusPrev = this.getAlumnoPagoStatus(aid, prevPeriod);
+                
+                const infoPrev = document.getElementById('info-pago-previo');
+                infoPrev.innerText = statusPrev.label;
+                infoPrev.style.color = statusPrev.color;
+
+                infoPanel.style.display = 'block';
+            } else {
+                inputAlumnoId.value = "";
+                infoPanel.style.display = 'none';
+                inputImporte.value = 0;
+            }
+        };
+
+        if (inputAlumno) {
+            inputAlumno.addEventListener('input', updateAlumnoInfo);
+            inputAlumno.addEventListener('change', updateAlumnoInfo);
+        }
+        if (inputMes) {
+            inputMes.addEventListener('change', updateAlumnoInfo);
         }
 
         if (btnGuardar) {
             btnGuardar.addEventListener('click', async () => {
-                const alumnoId = parseInt(selectAlumno.value);
+                const alumnoId = parseInt(inputAlumnoId.value);
                 const fecha = document.getElementById('pago-fecha').value;
-                const mesCorrespondiente = document.getElementById('pago-mes').value;
+                const mesCorrespondiente = inputMes.value;
                 const importe = parseFloat(inputImporte.value);
 
-                if (!alumnoId) { alert("Debe seleccionar un alumno."); return; }
-                if (!fecha) { alert("Debe seleccionar una fecha."); return; }
+                if (!alumnoId) { alert("Debe seleccionar un alumno válido."); return; }
+                if (!fecha) { alert("Debe seleccionar una fecha de pago."); return; }
                 if (!mesCorrespondiente) { alert("Debe indicar a qué mes corresponde este pago."); return; }
                 if (isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
 
@@ -1041,9 +1087,14 @@ window.ViewTurnos = {
 
                     alert("Pago registrado con éxito.");
 
-                    selectAlumno.value = "";
+                    inputAlumno.value = "";
+                    inputAlumnoId.value = "";
                     inputImporte.value = 0;
+                    infoPanel.style.display = 'none';
                     document.getElementById('pago-fecha').value = new Date().toISOString().split('T')[0];
+
+                    // Actualizar datos locales
+                    this.pagosData = await GristData.getTable('Pagos');
 
                 } catch (error) {
                     console.error("Error al registrar pago:", error);
