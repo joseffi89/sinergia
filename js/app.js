@@ -156,15 +156,32 @@ const App = {
         });
     },
 
-    loadView(viewName) {
-        // Hide all views
+    loadView(viewName, isAuthBypass = false) {
+        const sensitiveViews = ['pagos', 'gastos'];
+        
+        // Si es una vista sensible y no venimos de una validación exitosa, pedir clave
+        if (sensitiveViews.includes(viewName) && !isAuthBypass) {
+            this.showAuthModal(viewName);
+            return;
+        }
+
+        // Ocultar todas las vistas
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         
-        // Show target view
-        document.getElementById(`view-${viewName}`).classList.add('active');
+        // Mostrar vista objetivo
+        const targetEl = document.getElementById(`view-${viewName}`);
+        if (targetEl) targetEl.classList.add('active');
+        
         this.currentView = viewName;
 
-        // Render data logic (delegar a cada script de vista si existe)
+        // Actualizar estado activo en la navegación (por si se llama desde código)
+        const navBtns = document.querySelectorAll('.nav-btn');
+        navBtns.forEach(btn => {
+            if (btn.dataset.view === viewName) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+
+        // Render data logic
         switch(viewName) {
             case 'turnos':
                 if (window.ViewTurnos) window.ViewTurnos.render();
@@ -182,5 +199,52 @@ const App = {
                 if (window.ViewGastos) window.ViewGastos.render();
                 break;
         }
+    },
+
+    showAuthModal(targetView) {
+        const title = '<i class="ph ph-lock-key"></i> Acceso Restringido';
+        const bodyHtml = `
+            <div style="text-align:center; padding: 10px 0;">
+                <p style="margin-bottom: 20px; font-size: 14px; color: var(--text-muted);">Esta vista contiene información financiera sensible. Ingrese la contraseña de administrador para continuar.</p>
+                <div class="form-group">
+                    <input type="password" id="admin-password" class="form-control" placeholder="••••••••" style="text-align:center; font-size: 24px; letter-spacing: 8px; background: rgba(0,0,0,0.3);">
+                </div>
+                <p id="auth-error" style="color: var(--danger); font-size: 13px; margin-top: 15px; display: none; font-weight: 500;">
+                    <i class="ph ph-warning-circle"></i> Contraseña incorrecta. Intente de nuevo.
+                </p>
+            </div>
+        `;
+        const footerHtml = `
+            <button class="btn btn-secondary" id="btn-auth-cancel">Cancelar</button>
+            <button class="btn btn-primary" id="btn-auth-confirm" style="padding: 10px 30px;">Ingresar</button>
+        `;
+
+        window.Modal.show(title, bodyHtml, footerHtml);
+
+        const input = document.getElementById('admin-password');
+        setTimeout(() => input.focus(), 100); // Pequeño delay para asegurar que el DOM está listo
+
+        const validate = () => {
+            if (input.value === 'giasiner2026') {
+                window.Modal.close();
+                this.loadView(targetView, true);
+            } else {
+                const errorEl = document.getElementById('auth-error');
+                errorEl.style.display = 'block';
+                input.value = '';
+                input.focus();
+                // Efecto de vibración opcional si hubiera CSS, pero por ahora solo el mensaje
+            }
+        };
+
+        document.getElementById('btn-auth-confirm').addEventListener('click', validate);
+        document.getElementById('btn-auth-cancel').addEventListener('click', () => {
+            window.Modal.close();
+            // No hacemos nada, el usuario se queda en la vista donde estaba
+        });
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') validate();
+        });
     }
 };
