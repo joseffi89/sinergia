@@ -28,7 +28,7 @@ const GristData = {
 
     // Precarga todas las tablas en paralelo al arranque
     async prefetchAll() {
-        const tablas = ['Actividades', 'Horarios_Base', 'Turnos_Alumnos', 'Alumnos', 'Planes', 'Pagos'];
+        const tablas = ['Actividades', 'Horarios_Base', 'Turnos_Alumnos', 'Alumnos', 'Planes', 'Pagos', 'Gastos_Mensuales', 'Gastos_Categorias'];
         console.log("Prefetching all tables...");
         await Promise.all(tablas.map(t => this.getTable(t)));
         console.log("Prefetch complete.");
