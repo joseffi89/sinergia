@@ -134,6 +134,7 @@ window.ViewAlumnos = {
         let fecha_ingreso = alumnos.fecha_ingreso ? alumnos.fecha_ingreso[index] : '';
         const plan_id = alumnos.plan_id ? alumnos.plan_id[index] : '';
         const estado = alumnos.estado ? alumnos.estado[index] : 'Activo';
+        const telefono = alumnos.telefono ? alumnos.telefono[index] : '';
 
         if (typeof fecha_ingreso === 'number') {
             fecha_ingreso = new Date(fecha_ingreso * 1000).toISOString().split('T')[0];
@@ -145,20 +146,26 @@ window.ViewAlumnos = {
         try {
             const planes = await GristData.getTable('Planes');
             if (planes && planes.id) {
-                planes.id.forEach((pid, i) => {
-                    const selected = pid === plan_id ? 'selected' : '';
-                    options += `<option value="${pid}" ${selected}>${planes.nombre_plan[i]}</option>`;
+                // Ordenar planes alfabéticamente
+                const planesSorted = planes.id.map((pid, i) => ({
+                    id: pid,
+                    nombre: planes.nombre_plan[i]
+                })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+                planesSorted.forEach(p => {
+                    const selected = p.id === plan_id ? 'selected' : '';
+                    options += `<option value="${p.id}" ${selected}>${p.nombre}</option>`;
                 });
             }
         } catch (e) { }
 
         const formHtml = `
             <div class="form-group">
-                <label>Nombre</label>
+                <label>Nombre *</label>
                 <input type="text" id="edit-al-nombre" class="form-control" value="${nombre}">
             </div>
             <div class="form-group">
-                <label>Apellido</label>
+                <label>Apellido *</label>
                 <input type="text" id="edit-al-apellido" class="form-control" value="${apellido}">
             </div>
             <div class="form-group">
@@ -174,8 +181,12 @@ window.ViewAlumnos = {
                 <input type="date" id="edit-al-fecha" class="form-control" value="${fecha_ingreso}">
             </div>
             <div class="form-group">
-                <label>Plan</label>
+                <label>Plan *</label>
                 <select id="edit-al-plan" class="form-control">${options}</select>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="edit-al-telefono" class="form-control" value="${telefono}">
             </div>
             <div class="form-group">
                 <label>Estado</label>
@@ -194,13 +205,23 @@ window.ViewAlumnos = {
         window.Modal.show('Editar Alumno', formHtml, footerHtml);
 
         document.getElementById('btn-update-al').addEventListener('click', async () => {
+            const nombre = document.getElementById('edit-al-nombre').value.trim();
+            const apellido = document.getElementById('edit-al-apellido').value.trim();
+            const planId = document.getElementById('edit-al-plan').value;
+
+            if (!nombre || !apellido || !planId) {
+                alert('Nombre, Apellido y Plan son campos obligatorios.');
+                return;
+            }
+
             const data = {
-                nombre: document.getElementById('edit-al-nombre').value,
-                apellido: document.getElementById('edit-al-apellido').value,
+                nombre: nombre,
+                apellido: apellido,
                 dni: document.getElementById('edit-al-dni').value,
                 email: document.getElementById('edit-al-email').value,
+                telefono: document.getElementById('edit-al-telefono').value,
                 fecha_ingreso: document.getElementById('edit-al-fecha').value,
-                plan_id: parseInt(document.getElementById('edit-al-plan').value) || null,
+                plan_id: parseInt(planId) || null,
                 estado: document.getElementById('edit-al-estado').value
             };
             const btn = document.getElementById('btn-update-al');

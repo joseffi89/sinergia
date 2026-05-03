@@ -32,8 +32,14 @@ const App = {
                 try {
                     const planes = await GristData.getTable('Planes');
                     if(planes && planes.id) {
-                        planes.id.forEach((pid, i) => {
-                            options += `<option value="${pid}">${planes.nombre_plan[i]}</option>`;
+                        // Ordenar planes alfabéticamente
+                        const planesSorted = planes.id.map((pid, i) => ({
+                            id: pid,
+                            nombre: planes.nombre_plan[i]
+                        })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+                        planesSorted.forEach(p => {
+                            options += `<option value="${p.id}">${p.nombre}</option>`;
                         });
                     }
                 } catch(e) {}
@@ -42,11 +48,11 @@ const App = {
 
                 const formHtml = `
                     <div class="form-group">
-                        <label>Nombre</label>
+                        <label>Nombre *</label>
                         <input type="text" id="al-nombre" class="form-control" placeholder="Ej. Juan">
                     </div>
                     <div class="form-group">
-                        <label>Apellido</label>
+                        <label>Apellido *</label>
                         <input type="text" id="al-apellido" class="form-control" placeholder="Ej. Pérez">
                     </div>
                     <div class="form-group">
@@ -62,8 +68,12 @@ const App = {
                         <input type="date" id="al-fecha-ingreso" class="form-control" value="${hoy}">
                     </div>
                     <div class="form-group">
-                        <label>Plan</label>
+                        <label>Plan *</label>
                         <select id="al-plan" class="form-control">${options}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="text" id="al-telefono" class="form-control" placeholder="Ej. 11 1234 5678">
                     </div>
                 `;
                 const footerHtml = `
@@ -74,13 +84,23 @@ const App = {
 
                 document.getElementById('btn-cancelar').addEventListener('click', () => window.Modal.close());
                 document.getElementById('btn-guardar-al').addEventListener('click', async () => {
+                    const nombre = document.getElementById('al-nombre').value.trim();
+                    const apellido = document.getElementById('al-apellido').value.trim();
+                    const planId = document.getElementById('al-plan').value;
+
+                    if (!nombre || !apellido || !planId) {
+                        alert('Nombre, Apellido y Plan son campos obligatorios.');
+                        return;
+                    }
+
                     const data = {
-                        nombre: document.getElementById('al-nombre').value,
-                        apellido: document.getElementById('al-apellido').value,
+                        nombre: nombre,
+                        apellido: apellido,
                         dni: document.getElementById('al-dni').value,
                         email: document.getElementById('al-email').value,
+                        telefono: document.getElementById('al-telefono').value,
                         fecha_ingreso: document.getElementById('al-fecha-ingreso').value, // Formato YYYY-MM-DD compatible con Date
-                        plan_id: parseInt(document.getElementById('al-plan').value) || null,
+                        plan_id: parseInt(planId) || null,
                         estado: 'Activo'
                     };
                     try {
