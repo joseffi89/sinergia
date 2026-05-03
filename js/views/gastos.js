@@ -12,15 +12,14 @@ window.ViewGastos = {
             this.periodoActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // Cargar datos de Grist
+        // Cargar caché inicial
         this.gastosPagados = GristData.getCached('Gastos_Mensuales');
         this.categoriasData = GristData.getCached('Gastos_Categorias');
 
         if (this.gastosPagados) {
-            this.inicializarGastosVirtuales();
             this.renderDashboard();
         } else {
-            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando datos...</p>';
+            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
         }
 
         try {
@@ -32,20 +31,19 @@ window.ViewGastos = {
             this.gastosPagados = gastos;
             this.categoriasData = categorias;
             
-            this.inicializarGastosVirtuales();
+            // Sincronizar los virtuales con la nueva data de Grist
+            this.sincronizarGastosVirtuales();
             this.renderDashboard();
 
         } catch (error) {
             console.error("Error en Vista Gastos:", error);
-            if (!this.gastosPagados) container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist.</p>';
+            if (!this.gastosPagados) container.innerHTML = '<p style="color: var(--danger);">Error de conexión.</p>';
         }
     },
 
-    inicializarGastosVirtuales() {
+    sincronizarGastosVirtuales() {
         // 1. Identificar gastos fijos históricos
-        const fijosHistoricos = new Map(); // nombre -> {monto, catId}
-        
-        // Identificar ID de categoria "Fijo"
+        const fijosHistoricos = new Map();
         let idFijo = null;
         if (this.categoriasData && this.categoriasData.id) {
             const idx = this.categoriasData.nombre_categoria.indexOf('Fijo');
@@ -55,22 +53,20 @@ window.ViewGastos = {
         if (this.gastosPagados && this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
                 const catId = this.gastosPagados.categoria_id[i];
-                // Si la categoría es Fijo (por ID o por nombre si no tenemos el mapeo aún)
                 if (catId === idFijo || (this.categoriasData && this.categoriasData.nombre_categoria[this.categoriasData.id.indexOf(catId)] === 'Fijo')) {
                     const nombre = this.gastosPagados.nombre_gasto[i];
                     const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
-                    // Guardamos el más reciente (o simplemente el último que encontremos)
                     fijosHistoricos.set(nombre.toLowerCase(), { nombre, monto, catId: catId || idFijo });
                 }
             }
         }
 
-        // Si no hay ninguno, aseguramos Alquiler por defecto
+        // Alquiler por defecto si no hay nada
         if (fijosHistoricos.size === 0) {
             fijosHistoricos.set('alquiler', { nombre: 'Alquiler', monto: 1000000, catId: idFijo || 1 });
         }
 
-        // 2. Filtrar los que ya están pagados en el periodo actual
+        // 2. Ver lo que ya está pagado en este mes
         const pagadosEsteMes = new Set();
         if (this.gastosPagados && this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
@@ -80,11 +76,15 @@ window.ViewGastos = {
             }
         }
 
-        // 3. Crear lista virtual de impagos fijos
-        const nuevosVirtuales = [];
+        // 3. Reconstruir lista de virtuales
+        // Mantener los temporales que el usuario agregó manualmente
+        const manualesTemporales = this.gastosVirtuales.filter(v => v.categoria !== 'Fijo');
+        
+        // Generar los fijos que falten pagar
+        const fijosFaltantes = [];
         fijosHistoricos.forEach((data, nombreKey) => {
             if (!pagadosEsteMes.has(nombreKey)) {
-                nuevosVirtuales.push({
+                fijosFaltantes.push({
                     tempId: 'fix-' + nombreKey,
                     nombre: data.nombre,
                     monto: data.monto,
@@ -94,10 +94,10 @@ window.ViewGastos = {
             }
         });
 
-        // 4. Mantener temporales que el usuario haya agregado manualmente en esta sesión (si los hubiera)
-        const temporalesManuales = this.gastosVirtuales.filter(v => v.categoria === 'Temporal' && !v.tempId.toString().startsWith('fix-'));
+        // La lista final son los fijos faltantes + los manuales (que no hayan sido pagados ya)
+        const temporalesNoPagados = manualesTemporales.filter(m => !pagadosEsteMes.has(m.nombre.toLowerCase()));
         
-        this.gastosVirtuales = [...nuevosVirtuales, ...temporalesManuales];
+        this.gastosVirtuales = [...fijosFaltantes, ...temporalesNoPagados];
     },
 
     renderDashboard() {
@@ -115,7 +115,7 @@ window.ViewGastos = {
             });
         }
 
-        // 1. Gastos Reales (Grist)
+        // Pagados (Desde Grist)
         if (this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
                 if (this.gastosPagados.periodo_mes[i] === this.periodoActual) {
@@ -133,7 +133,7 @@ window.ViewGastos = {
             }
         }
 
-        // 2. Gastos Virtuales (Pendientes)
+        // Pendientes (Desde memoria)
         this.gastosVirtuales.forEach(gv => {
             totalPendiente += gv.monto;
             listaFinal.push({
@@ -147,7 +147,6 @@ window.ViewGastos = {
             });
         });
 
-        // Ordenar: Impagos arriba
         listaFinal.sort((a, b) => (a.estado === 'Impago' ? -1 : 1));
 
         const filasHtml = listaFinal.map(g => `
@@ -182,22 +181,22 @@ window.ViewGastos = {
                 <div class="kpi-card" style="background: var(--bg-card); border-left: 4px solid var(--success);">
                     <i class="ph ph-check-square" style="color: var(--success);"></i>
                     <div class="kpi-data">
-                        <h3>Pagado</h3>
+                        <h3>Total Pagado</h3>
                         <p>$${totalPagado.toLocaleString()}</p>
                     </div>
                 </div>
                 <div class="kpi-card" style="background: var(--bg-card); border-left: 4px solid var(--danger);">
                     <i class="ph ph-clock-afternoon" style="color: var(--danger);"></i>
                     <div class="kpi-data">
-                        <h3>Pendiente</h3>
+                        <h3>Total Pendiente</h3>
                         <p>$${totalPendiente.toLocaleString()}</p>
                     </div>
                 </div>
             </div>
 
-            <div class="view-header" style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+            <div class="view-header" style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center; background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
                 <div style="display:flex; gap: 15px; align-items:center;">
-                    <input type="month" id="filtro-gastos-periodo" class="form-control" value="${this.periodoActual}" onchange="window.ViewGastos.cambiarPeriodo(this.value)" style="width: auto; background: var(--bg-card); color: white; border: 1px solid var(--border);">
+                    <input type="month" id="filtro-gastos-periodo" class="form-control" value="${this.periodoActual}" onchange="window.ViewGastos.cambiarPeriodo(this.value)" style="width: auto; background: var(--bg-dark); color: white; border: 1px solid var(--border);">
                 </div>
                 <button class="btn btn-primary" onclick="window.ViewGastos.openNuevoGastoModal()"><i class="ph ph-plus"></i> Registrar Gasto</button>
             </div>
@@ -213,7 +212,7 @@ window.ViewGastos = {
                         </tr>
                     </thead>
                     <tbody>
-                        ${filasHtml || '<tr><td colspan="4" style="text-align:center; padding: 20px; color: var(--text-muted);">Sin gastos registrados</td></tr>'}
+                        ${filasHtml || '<tr><td colspan="4" style="text-align:center; padding: 20px; color: var(--text-muted);">Sin movimientos</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -222,6 +221,7 @@ window.ViewGastos = {
 
     cambiarPeriodo(periodo) {
         this.periodoActual = periodo;
+        this.gastosVirtuales = []; // Reiniciar para que se sincronicen los fijos del nuevo periodo
         this.render();
     },
 
@@ -236,7 +236,7 @@ window.ViewGastos = {
             </div>
             <div class="form-group">
                 <label>Descripción</label>
-                <input type="text" id="gasto-nombre" class="form-control" placeholder="Ej. Internet, Luz...">
+                <input type="text" id="gasto-nombre" class="form-control" placeholder="Ej. Luz, Internet...">
             </div>
             <div class="form-group">
                 <label>Monto ($)</label>
@@ -258,10 +258,12 @@ window.ViewGastos = {
 
             if (!nombre || isNaN(monto)) return alert('Complete los datos.');
 
-            // Si es fijo, buscamos el ID de categoría real para que se guarde bien luego
             let catId = categoria;
             if (categoria === 'Fijo' && this.categoriasData && this.categoriasData.id) {
                 const idx = this.categoriasData.nombre_categoria.indexOf('Fijo');
+                if (idx !== -1) catId = this.categoriasData.id[idx];
+            } else if (categoria === 'Temporal' && this.categoriasData && this.categoriasData.id) {
+                const idx = this.categoriasData.nombre_categoria.indexOf('Temporal');
                 if (idx !== -1) catId = this.categoriasData.id[idx];
             }
 
@@ -274,7 +276,7 @@ window.ViewGastos = {
             });
 
             window.Modal.close();
-            this.render();
+            this.renderDashboard(); // Render inmediato de la tabla
         });
     },
 
@@ -304,13 +306,13 @@ window.ViewGastos = {
             g.nombre = document.getElementById('edit-v-nombre').value.trim();
             g.monto = parseFloat(document.getElementById('edit-v-monto').value);
             window.Modal.close();
-            this.render();
+            this.renderDashboard();
         });
     },
 
     eliminarVirtual(tempId) {
         this.gastosVirtuales = this.gastosVirtuales.filter(v => v.tempId !== tempId);
-        this.render();
+        this.renderDashboard();
     },
 
     async confirmarPagoVirtual(tempId) {
@@ -330,16 +332,17 @@ window.ViewGastos = {
         try {
             await GristData.addRecord('Gastos_Mensuales', data);
             
-            // Eliminar de virtuales localmente
-            this.gastosVirtuales = this.gastosVirtuales.filter(v => v.tempId !== tempId);
-            
-            // Forzar recarga de Grist
+            // Forzar actualización inmediata de datos
             this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
-            this.render();
+            
+            // Sincronizar virtuales (esto eliminará el que acabamos de pagar de la lista virtual)
+            this.sincronizarGastosVirtuales();
+            
+            this.renderDashboard();
             alert('Pago registrado con éxito.');
         } catch (e) {
             console.error(e);
-            alert('Error al guardar en Grist.');
+            alert('Error al guardar en Grist. Verifique los permisos o campos.');
         }
     },
 
@@ -348,7 +351,8 @@ window.ViewGastos = {
         try {
             await GristData.deleteRecord('Gastos_Mensuales', id);
             this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
-            this.render();
+            this.sincronizarGastosVirtuales();
+            this.renderDashboard();
         } catch (e) {
             alert('Error al eliminar de Grist.');
         }
