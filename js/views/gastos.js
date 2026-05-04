@@ -93,7 +93,7 @@ window.ViewGastos = {
 
         if (this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                const pGrist = this.gastosPagados.period_mes[i];
+                const pGrist = this.gastosPagados.periodo_mes[i];
                 const cId = this.gastosPagados.categoria_id[i];
                 const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
                 const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
