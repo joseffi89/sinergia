@@ -1,8 +1,11 @@
 window.ViewGastos = {
     gastosPagados: null,
     categoriasData: null,
-    gastosTemporalesPorMes: {}, 
-    fijosManualesSesion: [], 
+    
+    pendientesPorMes: {}, // { '2026-05': [ {tempId, baseNombre, nombre, monto, categoria, ...} ] }
+    borradosPorMes: {},   // { '2026-05': Set('alquiler', 'luz') }
+    fijosNuevosGlobal: [],// [ {baseNombre, nombre, monto, catId} ]
+    
     periodoActual: '',
 
     async render() {
@@ -17,6 +20,7 @@ window.ViewGastos = {
         this.categoriasData = GristData.getCached('Gastos_Categorias');
 
         if (this.gastosPagados) {
+            this.sincronizarGastosVirtuales();
             this.renderDashboard();
         } else {
             container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
@@ -30,6 +34,8 @@ window.ViewGastos = {
 
             this.gastosPagados = gastos;
             this.categoriasData = categorias;
+            
+            this.sincronizarGastosVirtuales();
             this.renderDashboard();
 
         } catch (error) {
@@ -38,34 +44,103 @@ window.ViewGastos = {
         }
     },
 
-    // Función auxiliar para comparar periodos de forma robusta
     _esMismoMes(pGrist, pActual) {
         if (!pGrist) return false;
         const pg = String(pGrist).trim().toLowerCase();
         const pa = String(pActual).trim().toLowerCase();
         
-        // Caso exacto (2026-05)
         if (pg === pa) return true;
-        // Caso sin ceros (2026-5)
         if (pg.replace(/-0/g, '-') === pa.replace(/-0/g, '-')) return true;
-        // Caso que sea una fecha completa (2026-05-01...)
         if (pg.startsWith(pa)) return true;
         
-        // Caso por nombre de mes (si Grist devuelve "Mayo" o "May")
         const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
         const mesesShort = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
         const [anio, mesNum] = pa.split('-');
-        const nombreMes = meses[parseInt(mesNum) - 1];
-        const nombreMesShort = mesesShort[parseInt(mesNum) - 1];
+        const idx = parseInt(mesNum) - 1;
+        const nombreMes = meses[idx];
+        const nombreMesShort = mesesShort[idx];
         
         if (pg.includes(nombreMes) || pg.includes(nombreMesShort)) {
-            // Verificar también el año si está presente
             if (pg.includes(anio)) return true;
-            // Si solo dice el mes y estamos en el año actual, lo aceptamos (riesgoso pero útil)
             if (!pg.match(/\d{4}/)) return true; 
         }
 
         return false;
+    },
+
+    sincronizarGastosVirtuales() {
+        const mes = this.periodoActual;
+        
+        if (!this.pendientesPorMes[mes]) this.pendientesPorMes[mes] = [];
+        if (!this.borradosPorMes[mes]) this.borradosPorMes[mes] = new Set();
+
+        const pendientes = this.pendientesPorMes[mes];
+        const borrados = this.borradosPorMes[mes];
+
+        const catMap = {}; 
+        let idFijo = null;
+        if (this.categoriasData && this.categoriasData.id) {
+            this.categoriasData.id.forEach((cid, i) => {
+                const name = this.categoriasData.nombre_categoria[i];
+                catMap[cid] = name;
+                if (name === 'Fijo') idFijo = cid;
+            });
+        }
+
+        // 1. Identificar Pagos del mes y Fijos históricos
+        const pagadosEsteMes = new Set();
+        const fijosHistoricos = new Map();
+
+        if (this.gastosPagados && this.gastosPagados.id) {
+            for (let i = 0; i < this.gastosPagados.id.length; i++) {
+                const pGrist = this.gastosPagados.periodo_mes[i];
+                const cId = this.gastosPagados.categoria_id[i];
+                const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
+                const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
+                const baseNombre = nombre.toLowerCase();
+                
+                // Si es fijo, guardar en históricos
+                if (cId === idFijo || catMap[cId] === 'Fijo') {
+                    if (nombre) fijosHistoricos.set(baseNombre, { nombre, monto, catId: cId || idFijo });
+                }
+
+                // Si está pagado este mes
+                if (this._esMismoMes(pGrist, mes)) {
+                    pagadosEsteMes.add(baseNombre);
+                }
+            }
+        }
+
+        // 2. Agregar fijos nuevos globales a los históricos (para que se propaguen)
+        this.fijosNuevosGlobal.forEach(f => {
+            fijosHistoricos.set(f.baseNombre, f);
+        });
+
+        // 3. Alquiler por defecto si no hay fijos
+        if (fijosHistoricos.size === 0) {
+            fijosHistoricos.set('alquiler', { nombre: 'Alquiler', monto: 1000000, catId: idFijo || 1 });
+        }
+
+        // 4. Limpiar pendientes que ya fueron pagados en Grist
+        this.pendientesPorMes[mes] = pendientes.filter(p => !pagadosEsteMes.has(p.baseNombre));
+
+        // 5. Inyectar fijos históricos faltantes
+        fijosHistoricos.forEach((data, baseNombre) => {
+            const noEstaPagado = !pagadosEsteMes.has(baseNombre);
+            const noEstaBorrado = !borrados.has(baseNombre);
+            const noEstaEnVirtual = !this.pendientesPorMes[mes].some(p => p.baseNombre === baseNombre);
+
+            if (noEstaPagado && noEstaBorrado && noEstaEnVirtual) {
+                this.pendientesPorMes[mes].push({
+                    tempId: 'virt-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+                    baseNombre: baseNombre,
+                    nombre: data.nombre,
+                    monto: data.monto,
+                    categoria: 'Fijo',
+                    categoria_id: data.catId
+                });
+            }
+        });
     },
 
     renderDashboard() {
@@ -78,91 +153,34 @@ window.ViewGastos = {
         const listaFinal = [];
 
         const catMap = {}; 
-        let idFijo = null;
         if (this.categoriasData && this.categoriasData.id) {
             this.categoriasData.id.forEach((cid, i) => {
-                const name = this.categoriasData.nombre_categoria[i];
-                catMap[cid] = name;
-                if (name === 'Fijo') idFijo = cid;
+                catMap[cid] = this.categoriasData.nombre_categoria[i];
             });
         }
 
-        // 1. Identificar Pagos Reales (Cualquier cosa en Gastos_Mensuales para este mes se considera PAGADO)
-        const pagadosEsteMes = new Set();
-        const fijosHistoricos = new Map();
-
+        // 1. Mostrar pagados
         if (this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
                 const pGrist = this.gastosPagados.periodo_mes[i];
-                const cId = this.gastosPagados.categoria_id[i];
-                const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
-                const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
-                
-                // Si es un gasto fijo en CUALQUIER mes, lo guardamos para propagarlo como pendiente en otros
-                if (cId === idFijo || catMap[cId] === 'Fijo') {
-                    if (nombre) fijosHistoricos.set(nombre.toLowerCase(), { nombre, monto, catId: cId || idFijo });
-                }
-
-                // Si pertenece al mes actual, lo mostramos como PAGADO
-                if (this._esMismoMes(pGrist, this.periodoActual)) {
+                if (this._esMismoMes(pGrist, mes)) {
+                    const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
                     totalPagado += monto;
-                    pagadosEsteMes.add(nombre.toLowerCase());
-
                     listaFinal.push({
                         id: this.gastosPagados.id[i],
-                        nombre: nombre,
+                        nombre: this.gastosPagados.nombre_gasto[i],
                         monto: monto,
-                        categoria: catMap[cId] || 'General',
+                        categoria: catMap[this.gastosPagados.categoria_id[i]] || 'General',
                         fecha_pago: this.gastosPagados.fecha_pago ? this.gastosPagados.fecha_pago[i] : null,
-                        estado: 'Pagado'
+                        estado: 'Pagado' // Forzamos visualmente a Pagado porque está en Grist
                     });
                 }
             }
         }
 
-        // 2. Construir lista de Pendientes (Virtuales)
-        if (fijosHistoricos.size === 0) {
-            fijosHistoricos.set('alquiler', { nombre: 'Alquiler', monto: 1000000, catId: idFijo || 1 });
-        }
-
-        const pendientesMes = [];
-
-        // A. Fijos históricos
-        fijosHistoricos.forEach((data, nombreKey) => {
-            if (!pagadosEsteMes.has(nombreKey)) {
-                pendientesMes.push({
-                    tempId: 'fix-db-' + nombreKey,
-                    nombre: data.nombre,
-                    monto: data.monto,
-                    categoria: 'Fijo',
-                    categoria_id: data.catId
-                });
-            }
-        });
-
-        // B. Fijos manuales de sesión
-        this.fijosManualesSesion.forEach(f => {
-            const nombreKey = f.nombre.toLowerCase();
-            if (!pagadosEsteMes.has(nombreKey) && !fijosHistoricos.has(nombreKey)) {
-                pendientesMes.push({
-                    tempId: 'fix-man-' + nombreKey,
-                    nombre: f.nombre,
-                    monto: f.monto,
-                    categoria: 'Fijo',
-                    categoria_id: f.categoria_id
-                });
-            }
-        });
-
-        // C. Temporales de este mes
-        const temporales = this.gastosTemporalesPorMes[this.periodoActual] || [];
-        temporales.forEach(t => {
-            if (!pagadosEsteMes.has(t.nombre.toLowerCase())) {
-                pendientesMes.push(t);
-            }
-        });
-
-        pendientesMes.forEach(p => {
+        // 2. Mostrar pendientes
+        const pendientes = this.pendientesPorMes[mes] || [];
+        pendientes.forEach(p => {
             totalPendiente += p.monto;
             listaFinal.push({
                 ...p,
@@ -171,7 +189,11 @@ window.ViewGastos = {
             });
         });
 
-        listaFinal.sort((a, b) => (a.estado === 'Impago' ? -1 : 1));
+        // Ordenar
+        listaFinal.sort((a, b) => {
+            if (a.estado !== b.estado) return a.estado === 'Impago' ? -1 : 1;
+            return a.nombre.localeCompare(b.nombre);
+        });
 
         const filasHtml = listaFinal.map(g => `
             <tr style="border-bottom: 1px solid var(--border);">
@@ -190,7 +212,7 @@ window.ViewGastos = {
                 </td>
                 <td style="padding: 12px; text-align: right;">
                     ${g.estado === 'Impago' ? `
-                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.confirmarPagoVirtual('${g.tempId}', '${g.nombre}', ${g.monto}, ${g.categoria_id})"><i class="ph ph-hand-coins"></i> Pagar</button>
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.confirmarPagoVirtual('${g.tempId}')"><i class="ph ph-hand-coins"></i> Pagar</button>
                         <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px;" onclick="window.ViewGastos.editarVirtual('${g.tempId}')"><i class="ph ph-pencil-simple"></i></button>
                         <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px; color: var(--danger);" onclick="window.ViewGastos.eliminarVirtual('${g.tempId}')"><i class="ph ph-trash"></i></button>
                     ` : `
@@ -245,7 +267,8 @@ window.ViewGastos = {
 
     cambiarPeriodo(periodo) {
         this.periodoActual = periodo;
-        this.render();
+        this.sincronizarGastosVirtuales();
+        this.renderDashboard();
     },
 
     openNuevoGastoModal() {
@@ -288,18 +311,26 @@ window.ViewGastos = {
             }
 
             const item = {
-                tempId: Date.now().toString(),
+                tempId: 'virt-' + Date.now(),
+                baseNombre: nombre.toLowerCase(),
                 nombre,
                 monto,
                 categoria,
                 categoria_id: catId
             };
 
+            const mes = this.periodoActual;
+            if (!this.pendientesPorMes[mes]) this.pendientesPorMes[mes] = [];
+            this.pendientesPorMes[mes].push(item);
+
+            // Si es fijo, propagar a la memoria global
             if (categoria === 'Fijo') {
-                this.fijosManualesSesion.push(item);
-            } else {
-                if (!this.gastosTemporalesPorMes[this.periodoActual]) this.gastosTemporalesPorMes[this.periodoActual] = [];
-                this.gastosTemporalesPorMes[this.periodoActual].push(item);
+                this.fijosNuevosGlobal.push({
+                    baseNombre: nombre.toLowerCase(),
+                    nombre,
+                    monto,
+                    catId
+                });
             }
 
             window.Modal.close();
@@ -307,42 +338,9 @@ window.ViewGastos = {
         });
     },
 
-    async confirmarPagoVirtual(tempId, nombre, monto, catId) {
-        if (!confirm(`¿Confirmar pago de "${nombre}" por $${monto.toLocaleString()}?`)) return;
-
-        const data = {
-            categoria_id: catId,
-            nombre_gasto: nombre,
-            periodo_mes: this.periodoActual,
-            monto: monto,
-            fecha_pago: new Date().toISOString().split('T')[0],
-            estado: 'Pago' // Nueva columna solicitada por el usuario
-        };
-
-        try {
-            await GristData.addRecord('Gastos_Mensuales', data);
-            
-            if (this.gastosTemporalesPorMes[this.periodoActual]) {
-                this.gastosTemporalesPorMes[this.periodoActual] = this.gastosTemporalesPorMes[this.periodoActual].filter(v => v.tempId !== tempId);
-            }
-            this.fijosManualesSesion = this.fijosManualesSesion.filter(v => v.tempId !== tempId);
-
-            this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
-            this.renderDashboard();
-            alert('Pago registrado con éxito.');
-        } catch (e) {
-            console.error(e);
-            alert('Error al guardar en Grist.');
-        }
-    },
-
-    // ... resto de funciones (editarVirtual, eliminarVirtual, eliminarReal) se mantienen iguales ...
     editarVirtual(tempId) {
-        let item = null;
-        const temporales = this.gastosTemporalesPorMes[this.periodoActual] || [];
-        item = temporales.find(v => v.tempId === tempId);
-        if (!item) item = this.fijosManualesSesion.find(v => v.tempId === tempId);
-        
+        const mes = this.periodoActual;
+        const item = this.pendientesPorMes[mes].find(v => v.tempId === tempId);
         if (!item) return;
 
         const formHtml = `
@@ -366,9 +364,43 @@ window.ViewGastos = {
     },
 
     eliminarVirtual(tempId) {
-        if (this.gastosTemporalesPorMes[this.periodoActual]) this.gastosTemporalesPorMes[this.periodoActual] = this.gastosTemporalesPorMes[this.periodoActual].filter(v => v.tempId !== tempId);
-        this.fijosManualesSesion = this.fijosManualesSesion.filter(v => v.tempId !== tempId);
+        const mes = this.periodoActual;
+        const item = this.pendientesPorMes[mes].find(v => v.tempId === tempId);
+        if (item) {
+            this.borradosPorMes[mes].add(item.baseNombre);
+            this.pendientesPorMes[mes] = this.pendientesPorMes[mes].filter(v => v.tempId !== tempId);
+        }
         this.renderDashboard();
+    },
+
+    async confirmarPagoVirtual(tempId) {
+        const mes = this.periodoActual;
+        const item = this.pendientesPorMes[mes].find(v => v.tempId === tempId);
+        if (!item) return;
+
+        if (!confirm(`¿Confirmar pago de "${item.nombre}" por $${item.monto.toLocaleString()}?`)) return;
+
+        const data = {
+            categoria_id: item.categoria_id || item.categoria,
+            nombre_gasto: item.nombre,
+            periodo_mes: mes,
+            monto: item.monto,
+            fecha_pago: new Date().toISOString().split('T')[0],
+            estado: 'Pago'
+        };
+
+        try {
+            await GristData.addRecord('Gastos_Mensuales', data);
+            
+            // Refrescar data
+            this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
+            this.sincronizarGastosVirtuales();
+            this.renderDashboard();
+            
+        } catch (e) {
+            console.error(e);
+            alert('Error al guardar en Grist.');
+        }
     },
 
     async eliminarReal(id) {
@@ -376,6 +408,7 @@ window.ViewGastos = {
         try {
             await GristData.deleteRecord('Gastos_Mensuales', id);
             this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
+            this.sincronizarGastosVirtuales();
             this.renderDashboard();
         } catch (e) {
             alert('Error al eliminar de Grist.');
