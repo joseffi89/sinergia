@@ -1,8 +1,10 @@
 window.ViewGastos = {
     gastosPagados: null,
     categoriasData: null,
-    // Estructura: { 'YYYY-MM': [ {tempId, nombre, monto, categoria, ...}, ... ] }
-    gastosVirtualesPorMes: {},
+    // Gastos temporales por mes: { '2026-05': [ ... ] }
+    gastosTemporalesPorMes: {}, 
+    // Gastos fijos que el usuario definió manualmente en esta sesión (para que propaguen antes de ser pagados)
+    fijosManualesSesion: [], 
     periodoActual: '',
 
     async render() {
@@ -13,15 +15,13 @@ window.ViewGastos = {
             this.periodoActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // Cargar caché
         this.gastosPagados = GristData.getCached('Gastos_Mensuales');
         this.categoriasData = GristData.getCached('Gastos_Categorias');
 
         if (this.gastosPagados) {
-            this.sincronizarGastosVirtuales();
             this.renderDashboard();
         } else {
-            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando datos...</p>';
+            container.innerHTML = '<p style="color: var(--text-muted);"><i class="ph ph-spinner ph-spin"></i> Cargando...</p>';
         }
 
         try {
@@ -32,109 +32,65 @@ window.ViewGastos = {
 
             this.gastosPagados = gastos;
             this.categoriasData = categorias;
-            
-            this.sincronizarGastosVirtuales();
             this.renderDashboard();
 
         } catch (error) {
             console.error("Error en Vista Gastos:", error);
-            if (!this.gastosPagados) container.innerHTML = '<p style="color: var(--danger);">Error al conectar con Grist.</p>';
+            if (!this.gastosPagados) container.innerHTML = '<p style="color: var(--danger);">Error de conexión.</p>';
         }
-    },
-
-    sincronizarGastosVirtuales() {
-        const mes = this.periodoActual;
-        
-        // 1. Identificar gastos fijos históricos (buscamos en todos los meses pasados)
-        const fijosHistoricos = new Map();
-        let idFijo = null;
-        if (this.categoriasData && this.categoriasData.id) {
-            const idx = this.categoriasData.nombre_categoria.indexOf('Fijo');
-            if (idx !== -1) idFijo = this.categoriasData.id[idx];
-        }
-
-        if (this.gastosPagados && this.gastosPagados.id) {
-            for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                const catId = this.gastosPagados.categoria_id[i];
-                const isFijo = (catId === idFijo) || 
-                               (this.categoriasData && this.categoriasData.nombre_categoria[this.categoriasData.id.indexOf(catId)] === 'Fijo');
-                
-                if (isFijo) {
-                    const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
-                    const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
-                    if (nombre) {
-                        fijosHistoricos.set(nombre.toLowerCase(), { nombre, monto, catId: catId || idFijo });
-                    }
-                }
-            }
-        }
-
-        // Alquiler por defecto si no hay nada en el historial
-        if (fijosHistoricos.size === 0) {
-            fijosHistoricos.set('alquiler', { nombre: 'Alquiler', monto: 1000000, catId: idFijo || 1 });
-        }
-
-        // 2. Identificar qué gastos ya están pagados EN ESTE MES
-        const pagadosEsteMes = new Set();
-        if (this.gastosPagados && this.gastosPagados.id) {
-            for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                if (this.gastosPagados.periodo_mes[i] === mes && this.gastosPagados.fecha_pago[i]) {
-                    pagadosEsteMes.add((this.gastosPagados.nombre_gasto[i] || '').trim().toLowerCase());
-                }
-            }
-        }
-
-        // 3. Obtener o inicializar la lista virtual de este mes
-        if (!this.gastosVirtualesPorMes[mes]) {
-            this.gastosVirtualesPorMes[mes] = [];
-        }
-
-        // 4. Agregar los fijos históricos que falten en este mes
-        fijosHistoricos.forEach((data, nombreKey) => {
-            const yaEstaEnVirtual = this.gastosVirtualesPorMes[mes].some(v => v.nombre.toLowerCase() === nombreKey);
-            const yaEstaEnPagados = pagadosEsteMes.has(nombreKey);
-
-            if (!yaEstaEnVirtual && !yaEstaEnPagados) {
-                this.gastosVirtualesPorMes[mes].push({
-                    tempId: 'fix-' + nombreKey + '-' + mes,
-                    nombre: data.nombre,
-                    monto: data.monto,
-                    categoria: 'Fijo',
-                    categoria_id: data.catId
-                });
-            }
-        });
-
-        // 5. Limpieza: si un gasto virtual ahora figura como pagado en Grist, lo removemos de virtuales
-        this.gastosVirtualesPorMes[mes] = this.gastosVirtualesPorMes[mes].filter(v => {
-            return !pagadosEsteMes.has(v.nombre.toLowerCase());
-        });
     },
 
     renderDashboard() {
         const container = document.getElementById('gastos-container');
         if (!this.gastosPagados) return;
 
+        const mes = this.periodoActual;
         let totalPagado = 0;
         let totalPendiente = 0;
         const listaFinal = [];
 
-        const catMap = {};
+        // 1. Mapear categorías para búsqueda rápida
+        const catMap = {}; // id -> nombre
+        let idFijo = null;
         if (this.categoriasData && this.categoriasData.id) {
             this.categoriasData.id.forEach((cid, i) => {
-                catMap[cid] = this.categoriasData.nombre_categoria[i];
+                const name = this.categoriasData.nombre_categoria[i];
+                catMap[cid] = name;
+                if (name === 'Fijo') idFijo = cid;
             });
         }
 
-        // Pagados (Desde Grist)
+        // 2. Extraer todos los Gastos Fijos históricos de Grist (para propagarlos)
+        const fijosDesdeGrist = new Map();
         if (this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                if (this.gastosPagados.periodo_mes[i] === this.periodoActual) {
+                const cId = this.gastosPagados.categoria_id[i];
+                if (cId === idFijo || catMap[cId] === 'Fijo') {
+                    const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
+                    const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
+                    if (nombre) fijosDesdeGrist.set(nombre.toLowerCase(), { nombre, monto, catId: cId || idFijo });
+                }
+            }
+        }
+
+        // 3. Identificar Pagos Reales del Mes Actual
+        const pagadosEsteMes = new Set();
+        if (this.gastosPagados.id) {
+            for (let i = 0; i < this.gastosPagados.id.length; i++) {
+                // Normalización de periodo para evitar fallos de formato (Ej: 2026-05 vs 2026-5)
+                const pGrist = this.gastosPagados.periodo_mes[i];
+                const pActual = this.periodoActual;
+                
+                // Comprobamos si el periodo coincide (siendo flexibles con el formato)
+                if (pGrist === pActual || (pGrist && pGrist.replace(/-0/g, '-') === pActual.replace(/-0/g, '-'))) {
                     const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
                     totalPagado += monto;
+                    const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
+                    pagadosEsteMes.add(nombre.toLowerCase());
+
                     listaFinal.push({
                         id: this.gastosPagados.id[i],
-                        nombre: this.gastosPagados.nombre_gasto[i],
+                        nombre: nombre,
                         monto: monto,
                         categoria: catMap[this.gastosPagados.categoria_id[i]] || 'General',
                         fecha_pago: this.gastosPagados.fecha_pago[i],
@@ -144,21 +100,66 @@ window.ViewGastos = {
             }
         }
 
-        // Pendientes (Desde la lista virtual de este mes)
-        const virtualesEsteMes = this.gastosVirtualesPorMes[this.periodoActual] || [];
-        virtualesEsteMes.forEach(gv => {
-            totalPendiente += gv.monto;
+        // 4. Construir lista de Pendientes (Virtuales)
+        const pendientesMes = [];
+
+        // A. Fijos históricos (de Grist) que no se han pagado este mes
+        fijosDesdeGrist.forEach((data, nombreKey) => {
+            if (!pagadosEsteMes.has(nombreKey)) {
+                pendientesMes.push({
+                    tempId: 'fix-db-' + nombreKey,
+                    nombre: data.nombre,
+                    monto: data.monto,
+                    categoria: 'Fijo',
+                    categoria_id: data.catId
+                });
+            }
+        });
+
+        // B. Fijos manuales de esta sesión (que aún no tienen historial en Grist)
+        this.fijosManualesSesion.forEach(f => {
+            const nombreKey = f.nombre.toLowerCase();
+            if (!pagadosEsteMes.has(nombreKey) && !fijosDesdeGrist.has(nombreKey)) {
+                pendientesMes.push({
+                    tempId: 'fix-man-' + nombreKey,
+                    nombre: f.nombre,
+                    monto: f.monto,
+                    categoria: 'Fijo',
+                    categoria_id: f.categoria_id
+                });
+            }
+        });
+
+        // C. Alquiler por defecto (si no existe en ninguna lista anterior)
+        if (!pagadosEsteMes.has('alquiler') && !fijosDesdeGrist.has('alquiler') && !this.fijosManualesSesion.some(f => f.nombre.toLowerCase() === 'alquiler')) {
+            pendientesMes.push({
+                tempId: 'fix-def-alquiler',
+                nombre: 'Alquiler',
+                monto: 1000000,
+                categoria: 'Fijo',
+                categoria_id: idFijo || 1
+            });
+        }
+
+        // D. Temporales de este mes específico
+        const temporales = this.gastosTemporalesPorMes[this.periodoActual] || [];
+        temporales.forEach(t => {
+            if (!pagadosEsteMes.has(t.nombre.toLowerCase())) {
+                pendientesMes.push(t);
+            }
+        });
+
+        // Integrar pendientes a la lista final y sumar KPIs
+        pendientesMes.forEach(p => {
+            totalPendiente += p.monto;
             listaFinal.push({
-                tempId: gv.tempId,
-                nombre: gv.nombre,
-                monto: gv.monto,
-                categoria: gv.categoria,
-                categoria_id: gv.categoria_id,
+                ...p,
                 fecha_pago: null,
                 estado: 'Impago'
             });
         });
 
+        // Ordenar: Impagos arriba
         listaFinal.sort((a, b) => (a.estado === 'Impago' ? -1 : 1));
 
         const filasHtml = listaFinal.map(g => `
@@ -178,7 +179,7 @@ window.ViewGastos = {
                 </td>
                 <td style="padding: 12px; text-align: right;">
                     ${g.estado === 'Impago' ? `
-                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.confirmarPagoVirtual('${g.tempId}')"><i class="ph ph-hand-coins"></i> Pagar</button>
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.ViewGastos.confirmarPagoVirtual('${g.tempId}', '${g.nombre}', ${g.monto}, ${g.categoria_id})"><i class="ph ph-hand-coins"></i> Pagar</button>
                         <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px;" onclick="window.ViewGastos.editarVirtual('${g.tempId}')"><i class="ph ph-pencil-simple"></i></button>
                         <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 14px; color: var(--danger);" onclick="window.ViewGastos.eliminarVirtual('${g.tempId}')"><i class="ph ph-trash"></i></button>
                     ` : `
@@ -241,8 +242,8 @@ window.ViewGastos = {
             <div class="form-group">
                 <label>Categoría</label>
                 <select id="gasto-categoria" class="form-control">
-                    <option value="Fijo">Fijo</option>
-                    <option value="Temporal" selected>Temporal</option>
+                    <option value="Fijo">Fijo (Se repite todos los meses)</option>
+                    <option value="Temporal" selected>Temporal (Solo este mes)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -269,22 +270,26 @@ window.ViewGastos = {
 
             if (!nombre || isNaN(monto)) return alert('Complete los datos.');
 
-            let catId = categoria;
+            let catId = 2; // Temporal por defecto
             if (this.categoriasData && this.categoriasData.id) {
                 const idx = this.categoriasData.nombre_categoria.indexOf(categoria);
                 if (idx !== -1) catId = this.categoriasData.id[idx];
             }
 
-            const mes = this.periodoActual;
-            if (!this.gastosVirtualesPorMes[mes]) this.gastosVirtualesPorMes[mes] = [];
-            
-            this.gastosVirtualesPorMes[mes].push({
-                tempId: Date.now() + '-' + mes,
+            const item = {
+                tempId: Date.now().toString(),
                 nombre,
                 monto,
                 categoria,
                 categoria_id: catId
-            });
+            };
+
+            if (categoria === 'Fijo') {
+                this.fijosManualesSesion.push(item);
+            } else {
+                if (!this.gastosTemporalesPorMes[this.periodoActual]) this.gastosTemporalesPorMes[this.periodoActual] = [];
+                this.gastosTemporalesPorMes[this.periodoActual].push(item);
+            }
 
             window.Modal.close();
             this.renderDashboard();
@@ -292,19 +297,55 @@ window.ViewGastos = {
     },
 
     editarVirtual(tempId) {
-        const mes = this.periodoActual;
-        const lista = this.gastosVirtualesPorMes[mes] || [];
-        const g = lista.find(v => v.tempId === tempId);
-        if (!g) return;
+        // Buscar en todas las posibles fuentes de virtuales
+        let item = null;
+        let source = null;
+
+        // Buscar en temporales del mes actual
+        const temporales = this.gastosTemporalesPorMes[this.periodoActual] || [];
+        item = temporales.find(v => v.tempId === tempId);
+        if (item) source = temporales;
+
+        // Buscar en fijos manuales
+        if (!item) {
+            item = this.fijosManualesSesion.find(v => v.tempId === tempId);
+            if (item) source = this.fijosManualesSesion;
+        }
+
+        // Buscar en fijos heredados de DB (creamos una copia local para editar si no existe)
+        if (!item && tempId.startsWith('fix-db-')) {
+            // Para editar un heredado de DB sin que haya registro aún, lo convertimos en un fijo manual de sesión
+            const nombreKey = tempId.replace('fix-db-', '');
+            // Buscamos los datos originales
+            this.renderDashboard(); // Aseguramos que se ejecute la lógica de render para tener datos frescos
+            // En lugar de buscar, simplemente creamos un modal con los datos que se ven
+            // Pero para simplificar, usaremos un enfoque directo:
+            const row = document.querySelector(`button[onclick*="${tempId}"]`).closest('tr');
+            const nombre = row.querySelector('span[style*="font-weight: 500"]').innerText;
+            const monto = parseFloat(row.querySelectorAll('td')[1].innerText.replace('$', '').replace(/,/g, ''));
+            
+            this.fijosManualesSesion.push({
+                tempId: 'fix-man-' + Date.now(),
+                nombre: nombre,
+                monto: monto,
+                categoria: 'Fijo',
+                categoria_id: 1 // Asumido
+            });
+            this.renderDashboard();
+            alert("Gasto fijo habilitado para edición. Vuelva a presionar editar.");
+            return;
+        }
+
+        if (!item) return;
 
         const formHtml = `
             <div class="form-group">
                 <label>Descripción</label>
-                <input type="text" id="edit-v-nombre" class="form-control" value="${g.nombre}">
+                <input type="text" id="edit-v-nombre" class="form-control" value="${item.nombre}">
             </div>
             <div class="form-group">
                 <label>Monto ($)</label>
-                <input type="number" id="edit-v-monto" class="form-control" value="${g.monto}">
+                <input type="number" id="edit-v-monto" class="form-control" value="${item.monto}">
             </div>
         `;
 
@@ -313,50 +354,50 @@ window.ViewGastos = {
             <button class="btn btn-primary" id="btn-update-virtual">Actualizar</button>
         `;
 
-        window.Modal.show('Editar Gasto Pendiente', formHtml, footerHtml);
+        window.Modal.show('Editar Pendiente', formHtml, footerHtml);
 
         document.getElementById('btn-update-virtual').addEventListener('click', () => {
-            g.nombre = document.getElementById('edit-v-nombre').value.trim();
-            g.monto = parseFloat(document.getElementById('edit-v-monto').value);
+            item.nombre = document.getElementById('edit-v-nombre').value.trim();
+            item.monto = parseFloat(document.getElementById('edit-v-monto').value);
             window.Modal.close();
             this.renderDashboard();
         });
     },
 
     eliminarVirtual(tempId) {
-        const mes = this.periodoActual;
-        if (this.gastosVirtualesPorMes[mes]) {
-            this.gastosVirtualesPorMes[mes] = this.gastosVirtualesPorMes[mes].filter(v => v.tempId !== tempId);
+        if (this.gastosTemporalesPorMes[this.periodoActual]) {
+            this.gastosTemporalesPorMes[this.periodoActual] = this.gastosTemporalesPorMes[this.periodoActual].filter(v => v.tempId !== tempId);
         }
+        this.fijosManualesSesion = this.fijosManualesSesion.filter(v => v.tempId !== tempId);
+        
+        // Si es un fix-db (heredado), no podemos "eliminarlo" de la DB sin pagar, 
+        // pero podemos ignorarlo en la sesión si quisiéramos. Por ahora el usuario no pidió ocultar fijos heredados.
         this.renderDashboard();
     },
 
-    async confirmarPagoVirtual(tempId) {
-        const mes = this.periodoActual;
-        const lista = this.gastosVirtualesPorMes[mes] || [];
-        const g = lista.find(v => v.tempId === tempId);
-        if (!g) return;
-
-        if (!confirm(`¿Confirmar pago de "${g.nombre}" por $${g.monto.toLocaleString()}?`)) return;
+    async confirmarPagoVirtual(tempId, nombre, monto, catId) {
+        if (!confirm(`¿Confirmar pago de "${nombre}" por $${monto.toLocaleString()}?`)) return;
 
         const data = {
-            categoria_id: g.categoria_id || g.categoria,
-            nombre_gasto: g.nombre,
-            periodo_mes: mes,
-            monto: g.monto,
+            categoria_id: catId,
+            nombre_gasto: nombre,
+            periodo_mes: this.periodoActual,
+            monto: monto,
             fecha_pago: new Date().toISOString().split('T')[0]
         };
 
         try {
             await GristData.addRecord('Gastos_Mensuales', data);
             
-            // Forzar actualización inmediata de datos de Grist
+            // Si era un temporal manual, quitarlo
+            if (this.gastosTemporalesPorMes[this.periodoActual]) {
+                this.gastosTemporalesPorMes[this.periodoActual] = this.gastosTemporalesPorMes[this.periodoActual].filter(v => v.tempId !== tempId);
+            }
+            // Si era un fijo manual de sesión, ya no hace falta que sea manual porque ahora tiene historial en Grist
+            this.fijosManualesSesion = this.fijosManualesSesion.filter(v => v.tempId !== tempId);
+
             this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
-            
-            // Al sincronizar, se detectará que el nombre ahora está en pagados y se removerá del virtual automáticamente
-            this.sincronizarGastosVirtuales();
             this.renderDashboard();
-            
             alert('Pago registrado con éxito.');
         } catch (e) {
             console.error(e);
@@ -369,7 +410,6 @@ window.ViewGastos = {
         try {
             await GristData.deleteRecord('Gastos_Mensuales', id);
             this.gastosPagados = await GristData.getTable('Gastos_Mensuales');
-            this.sincronizarGastosVirtuales();
             this.renderDashboard();
         } catch (e) {
             alert('Error al eliminar de Grist.');
