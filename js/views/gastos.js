@@ -44,30 +44,6 @@ window.ViewGastos = {
         }
     },
 
-    _esMismoMes(pGrist, pActual) {
-        if (!pGrist) return false;
-        const pg = String(pGrist).trim().toLowerCase();
-        const pa = String(pActual).trim().toLowerCase();
-        
-        if (pg === pa) return true;
-        if (pg.replace(/-0/g, '-') === pa.replace(/-0/g, '-')) return true;
-        if (pg.startsWith(pa)) return true;
-        
-        const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-        const mesesShort = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-        const [anio, mesNum] = pa.split('-');
-        const idx = parseInt(mesNum) - 1;
-        const nombreMes = meses[idx];
-        const nombreMesShort = mesesShort[idx];
-        
-        if (pg.includes(nombreMes) || pg.includes(nombreMesShort)) {
-            if (pg.includes(anio)) return true;
-            if (!pg.match(/\d{4}/)) return true; 
-        }
-
-        return false;
-    },
-
     sincronizarGastosVirtuales() {
         const mes = this.periodoActual;
         
@@ -93,7 +69,12 @@ window.ViewGastos = {
 
         if (this.gastosPagados && this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                const pGrist = this.gastosPagados.periodo_mes[i];
+                let pGrist = this.gastosPagados.periodo_mes[i];
+                // Manejar si periodo_mes es una columna de tipo Fecha en Grist (devuelve timestamp numérico)
+                if (typeof pGrist === 'number') {
+                    pGrist = new Date(pGrist * 1000).toISOString().substring(0, 7);
+                }
+
                 const cId = this.gastosPagados.categoria_id[i];
                 const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
                 const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
@@ -105,13 +86,13 @@ window.ViewGastos = {
                 }
 
                 // Si está pagado este mes
-                if (this._esMismoMes(pGrist, mes)) {
+                if (pGrist === mes) {
                     pagadosEsteMes.add(baseNombre);
                 }
             }
         }
 
-        // 2. Agregar fijos nuevos globales a los históricos (para que se propaguen)
+        // 2. Agregar fijos nuevos globales a los históricos
         this.fijosNuevosGlobal.forEach(f => {
             fijosHistoricos.set(f.baseNombre, f);
         });
@@ -159,20 +140,31 @@ window.ViewGastos = {
             });
         }
 
-        // 1. Mostrar pagados
+        // 1. Mostrar pagados (de Grist)
         if (this.gastosPagados.id) {
             for (let i = 0; i < this.gastosPagados.id.length; i++) {
-                const pGrist = this.gastosPagados.periodo_mes[i];
-                if (this._esMismoMes(pGrist, mes)) {
+                let pGrist = this.gastosPagados.periodo_mes[i];
+                if (typeof pGrist === 'number') {
+                    pGrist = new Date(pGrist * 1000).toISOString().substring(0, 7);
+                }
+
+                if (pGrist === mes) {
                     const monto = parseFloat(this.gastosPagados.monto[i]) || 0;
+                    const cId = this.gastosPagados.categoria_id[i];
+                    const nombre = (this.gastosPagados.nombre_gasto[i] || '').trim();
+                    let fecha = this.gastosPagados.fecha_pago ? this.gastosPagados.fecha_pago[i] : null;
+                    if (typeof fecha === 'number') {
+                        fecha = new Date(fecha * 1000).toISOString().split('T')[0];
+                    }
+
                     totalPagado += monto;
                     listaFinal.push({
                         id: this.gastosPagados.id[i],
-                        nombre: this.gastosPagados.nombre_gasto[i],
+                        nombre: nombre,
                         monto: monto,
-                        categoria: catMap[this.gastosPagados.categoria_id[i]] || 'General',
-                        fecha_pago: this.gastosPagados.fecha_pago ? this.gastosPagados.fecha_pago[i] : null,
-                        estado: 'Pagado' // Forzamos visualmente a Pagado porque está en Grist
+                        categoria: catMap[cId] || 'General',
+                        fecha_pago: fecha,
+                        estado: 'Pagado'
                     });
                 }
             }
