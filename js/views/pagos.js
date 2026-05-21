@@ -121,7 +121,8 @@ window.ViewPagos = {
                 planesMap[this.planesData.id[p]] = {
                     nombre: this.planesData.nombre_plan[p],
                     tipo: this.planesData.tipo_plan ? (this.planesData.tipo_plan[p] || '') : '',
-                    importe: parseFloat(this.planesData.importe[p]) || 0
+                    importe: parseFloat(this.planesData.importe[p]) || 0,
+                    combo: this.planesData.combo ? !!this.planesData.combo[p] : false
                 };
             }
         }
@@ -142,8 +143,9 @@ window.ViewPagos = {
                 const planId = this.alumnosData.plan_id[i];
                 const planInfo = planesMap[planId] || { nombre: 'Sin Plan', tipo: '', importe: 0 };
 
-                // Filtro por tipo de plan
-                if (this.filtroTipoPlanes.length > 0 && !this.filtroTipoPlanes.includes(planInfo.tipo)) continue;
+                // Filtro por tipo de plan (agrupado)
+                const planGroup = planInfo.combo ? 'Combo' : planInfo.nombre;
+                if (this.filtroTipoPlanes.length > 0 && !this.filtroTipoPlanes.includes(planGroup)) continue;
 
                 const pAlumno = pagosPorAlumno[this.alumnosData.id[i]] || 0;
                 const displayName = this.alumnosData.Apellido_y_Nombre
@@ -218,16 +220,21 @@ window.ViewPagos = {
             </tr>
         `).join('');
 
-        // Checkboxes de tipo_plan
-        const tiposUnicos = [...new Set(Object.values(planesMap).map(p => p.tipo).filter(t => t))];
-        tiposUnicos.sort();
+        // Checkboxes de tipos (agrupados)
+        const groupSet = new Set();
+        Object.values(planesMap).forEach(p => {
+            if (p.combo) groupSet.add('Combo');
+            else if (p.nombre) groupSet.add(p.nombre);
+        });
+        const groupsArray = Array.from(groupSet);
+        groupsArray.sort();
         let planCheckboxesHtml = '';
-        tiposUnicos.forEach(tipo => {
-            const checked = this.filtroTipoPlanes.includes(tipo) ? 'checked' : '';
+        groupsArray.forEach(group => {
+            const checked = this.filtroTipoPlanes.includes(group) ? 'checked' : '';
             planCheckboxesHtml += `
                 <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:pointer;">
-                    <input type="checkbox" class="filtro-plan-chk" value="${tipo}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
-                    ${tipo}
+                    <input type="checkbox" class="filtro-plan-chk" value="${group}" ${checked} onchange="window.ViewPagos.aplicarFiltos()">
+                    ${group}
                 </label>
             `;
         });
