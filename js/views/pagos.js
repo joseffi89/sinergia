@@ -102,7 +102,9 @@ window.ViewPagos = {
         let totalPagosCount = 0;
         let totalImpagosCount = 0;
 
-        const hoyIso = new Date().toISOString().split('T')[0];
+        // Usar fecha local (no UTC) para evitar desfasajes de zona horaria
+        const _hoy = new Date();
+        const hoyIso = `${_hoy.getFullYear()}-${String(_hoy.getMonth() + 1).padStart(2, '0')}-${String(_hoy.getDate()).padStart(2, '0')}`;
         const alumnosProcesados = [];
 
         const pagosPorAlumno = {};
@@ -122,7 +124,7 @@ window.ViewPagos = {
                     nombre: this.planesData.nombre_plan[p],
                     tipo: this.planesData.tipo_plan ? (this.planesData.tipo_plan[p] || '') : '',
                     importe: parseFloat(this.planesData.importe[p]) || 0,
-                    combo: this.planesData.combo ? !!this.planesData.combo[p] : false
+                    combo: this.planesData.Combo ? !!this.planesData.Combo[p] : false
                 };
             }
         }
@@ -158,7 +160,8 @@ window.ViewPagos = {
                 let estadoPago = '', colorEstado = '', bgEstado = '', esPago = false;
                 let fechaVtoStr = this.calcularVencimiento(fechaIso, this.periodoActual);
 
-                if (pAlumno >= planInfo.importe && planInfo.importe > 0) {
+                // Si hay cualquier pago registrado para este período → Pagado
+                if (pAlumno > 0 && planInfo.importe > 0) {
                     estadoPago = 'Pagado'; colorEstado = 'var(--success)'; bgEstado = 'rgba(46, 204, 113, 0.1)';
                     esPago = true;
                 } else if (planInfo.importe === 0) {
@@ -233,7 +236,7 @@ window.ViewPagos = {
             const checked = this.filtroTipoPlanes.includes(group) ? 'checked' : '';
             planCheckboxesHtml += `
                 <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:pointer;">
-                    <input type="checkbox" class="filtro-plan-chk" value="${group}" ${checked} onchange="window.ViewPagos.aplicarFiltos()">
+                    <input type="checkbox" class="filtro-plan-chk" value="${group}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
                     ${group}
                 </label>
             `;
