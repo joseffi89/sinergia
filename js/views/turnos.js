@@ -977,14 +977,10 @@ window.ViewTurnos = {
                 </div>
 
                 <div id="info-pago-alumno" style="display:none; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="display:grid; grid-template-columns: 1fr; gap: 15px;">
                         <div style="font-size: 13px;">
                             <div style="color: var(--text-muted); margin-bottom: 4px;">Vencimiento del Mes</div>
                             <div id="info-vencimiento" style="font-weight: 600;">-</div>
-                        </div>
-                        <div style="font-size: 13px;">
-                            <div style="color: var(--text-muted); margin-bottom: 4px;">Estado Pago Anterior</div>
-                            <div id="info-pago-previo" style="font-weight: 600;">-</div>
                         </div>
                     </div>
                 </div>
@@ -1020,11 +1016,43 @@ window.ViewTurnos = {
         const inputMes = document.getElementById('pago-mes');
         const btnGuardar = document.getElementById('btn-guardar-pago');
         const infoPanel = document.getElementById('info-pago-alumno');
+        let ultimoPagoDuplicadoAvisado = null;
+
+        const formatFechaPago = (fecha) => {
+            if (!fecha) return '-';
+            if (typeof fecha === 'number') {
+                return new Date(fecha * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
+            }
+            return String(fecha).split('T')[0].split('-').reverse().join('/');
+        };
+
+        const buscarPagoExistente = (alumnoId, mesCorrespondiente) => {
+            if (!this.pagosData || !this.pagosData.id || !alumnoId || !mesCorrespondiente) return null;
+
+            for (let i = 0; i < this.pagosData.id.length; i++) {
+                if (
+                    parseInt(this.pagosData.alumno_id[i]) === alumnoId &&
+                    this.pagosData.mes_correspondiente[i] === mesCorrespondiente
+                ) {
+                    return {
+                        mes_correspondiente: this.pagosData.mes_correspondiente[i],
+                        fecha: this.pagosData.fecha[i]
+                    };
+                }
+            }
+
+            return null;
+        };
+
+        const avisarPagoExistente = (pagoExistente) => {
+            alert(`El alumno ya abono la cuota del mes ${pagoExistente.mes_correspondiente} el día ${formatFechaPago(pagoExistente.fecha)}`);
+        };
 
         const updateAlumnoInfo = () => {
             const val = inputAlumno.value;
             const mes = inputMes.value;
-            const option = document.querySelector(`#dl-alumnos-pagos option[value="${val}"]`);
+            const option = Array.from(document.querySelectorAll('#dl-alumnos-pagos option'))
+                .find(opt => opt.value === val);
             
             if (option && mes) {
                 const aid = parseInt(option.getAttribute('data-id'));
@@ -1035,22 +1063,21 @@ window.ViewTurnos = {
                 document.getElementById('info-vencimiento').innerText = statusActual.vencimiento ? statusActual.vencimiento.split('-').reverse().join('/') : '-';
                 inputImporte.value = statusActual.importe;
 
-                // Calcular info mes anterior
-                const [y, m] = mes.split('-');
-                let prevYear = parseInt(y), prevMonth = parseInt(m) - 1;
-                if (prevMonth === 0) { prevMonth = 12; prevYear--; }
-                const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
-                const statusPrev = this.getAlumnoPagoStatus(aid, prevPeriod);
-                
-                const infoPrev = document.getElementById('info-pago-previo');
-                infoPrev.innerText = statusPrev.label;
-                infoPrev.style.color = statusPrev.color;
+                const pagoExistente = buscarPagoExistente(aid, mes);
+                const pagoDuplicadoKey = pagoExistente ? `${aid}-${mes}-${pagoExistente.fecha}` : null;
+                if (pagoExistente && pagoDuplicadoKey !== ultimoPagoDuplicadoAvisado) {
+                    avisarPagoExistente(pagoExistente);
+                    ultimoPagoDuplicadoAvisado = pagoDuplicadoKey;
+                } else if (!pagoExistente) {
+                    ultimoPagoDuplicadoAvisado = null;
+                }
 
                 infoPanel.style.display = 'block';
             } else {
                 inputAlumnoId.value = "";
                 infoPanel.style.display = 'none';
                 inputImporte.value = 0;
+                ultimoPagoDuplicadoAvisado = null;
             }
         };
 
@@ -1074,9 +1101,22 @@ window.ViewTurnos = {
                 if (!mesCorrespondiente) { alert("Debe indicar a qué mes corresponde este pago."); return; }
                 if (isNaN(importe) || importe <= 0) { alert("El importe debe ser mayor a cero."); return; }
 
+                const pagoExistente = buscarPagoExistente(alumnoId, mesCorrespondiente);
+                if (pagoExistente) {
+                    avisarPagoExistente(pagoExistente);
+                    return;
+                }
+
                 try {
                     btnGuardar.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Registrando...';
                     btnGuardar.disabled = true;
+
+                    this.pagosData = await GristData.getTable('Pagos');
+                    const pagoActualizado = buscarPagoExistente(alumnoId, mesCorrespondiente);
+                    if (pagoActualizado) {
+                        avisarPagoExistente(pagoActualizado);
+                        return;
+                    }
 
                     await GristData.addRecord('Pagos', {
                         alumno_id: alumnoId,
