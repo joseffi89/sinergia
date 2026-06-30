@@ -181,6 +181,13 @@ body {
     box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
 }
 
+.btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 .btn-secondary {
     background-color: var(--bg-card);
     color: var(--text-main);
@@ -189,6 +196,11 @@ body {
 
 .btn-secondary:hover {
     background-color: rgba(255,255,255,0.05);
+}
+
+.btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
 }
 
 /* KPI Cards */

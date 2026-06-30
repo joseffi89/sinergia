@@ -985,6 +985,14 @@ window.ViewTurnos = {
                     </div>
                 </div>
 
+                <div id="pago-duplicado-aviso" style="display:none; align-items:flex-start; gap:10px; background: rgba(241, 196, 15, 0.12); border: 1px solid rgba(241, 196, 15, 0.35); color: var(--warning); border-radius: 8px; padding: 12px 14px; margin-bottom: 18px;">
+                    <i class="ph ph-warning-circle" style="font-size: 20px; flex-shrink:0; margin-top:1px;"></i>
+                    <div>
+                        <div style="font-weight:700; margin-bottom:2px;">Pago ya registrado</div>
+                        <div id="pago-duplicado-texto" style="font-size:13px; line-height:1.4; color: var(--text);"></div>
+                    </div>
+                </div>
+
                 <div style="display:flex; gap:15px; margin-top: 15px;">
                     <div class="form-group" style="flex:1;">
                         <label>Fecha de Pago</label>
@@ -1016,7 +1024,9 @@ window.ViewTurnos = {
         const inputMes = document.getElementById('pago-mes');
         const btnGuardar = document.getElementById('btn-guardar-pago');
         const infoPanel = document.getElementById('info-pago-alumno');
-        let ultimoPagoDuplicadoAvisado = null;
+        const avisoDuplicado = document.getElementById('pago-duplicado-aviso');
+        const textoDuplicado = document.getElementById('pago-duplicado-texto');
+        let pagoDuplicadoActivo = false;
 
         const formatFechaPago = (fecha) => {
             if (!fecha) return '-';
@@ -1044,8 +1054,19 @@ window.ViewTurnos = {
             return null;
         };
 
-        const avisarPagoExistente = (pagoExistente) => {
-            alert(`El alumno ya abono la cuota del mes ${pagoExistente.mes_correspondiente} el día ${formatFechaPago(pagoExistente.fecha)}`);
+        const mostrarPagoExistente = (pagoExistente) => {
+            pagoDuplicadoActivo = !!pagoExistente;
+            if (!avisoDuplicado || !textoDuplicado) return;
+
+            if (pagoExistente) {
+                textoDuplicado.innerText = `El alumno ya abono la cuota del mes ${pagoExistente.mes_correspondiente} el día ${formatFechaPago(pagoExistente.fecha)}.`;
+                avisoDuplicado.style.display = 'flex';
+                if (btnGuardar) btnGuardar.disabled = true;
+            } else {
+                textoDuplicado.innerText = '';
+                avisoDuplicado.style.display = 'none';
+                if (btnGuardar) btnGuardar.disabled = false;
+            }
         };
 
         const updateAlumnoInfo = () => {
@@ -1064,20 +1085,14 @@ window.ViewTurnos = {
                 inputImporte.value = statusActual.importe;
 
                 const pagoExistente = buscarPagoExistente(aid, mes);
-                const pagoDuplicadoKey = pagoExistente ? `${aid}-${mes}-${pagoExistente.fecha}` : null;
-                if (pagoExistente && pagoDuplicadoKey !== ultimoPagoDuplicadoAvisado) {
-                    avisarPagoExistente(pagoExistente);
-                    ultimoPagoDuplicadoAvisado = pagoDuplicadoKey;
-                } else if (!pagoExistente) {
-                    ultimoPagoDuplicadoAvisado = null;
-                }
+                mostrarPagoExistente(pagoExistente);
 
                 infoPanel.style.display = 'block';
             } else {
                 inputAlumnoId.value = "";
                 infoPanel.style.display = 'none';
                 inputImporte.value = 0;
-                ultimoPagoDuplicadoAvisado = null;
+                mostrarPagoExistente(null);
             }
         };
 
@@ -1103,7 +1118,7 @@ window.ViewTurnos = {
 
                 const pagoExistente = buscarPagoExistente(alumnoId, mesCorrespondiente);
                 if (pagoExistente) {
-                    avisarPagoExistente(pagoExistente);
+                    mostrarPagoExistente(pagoExistente);
                     return;
                 }
 
@@ -1114,7 +1129,7 @@ window.ViewTurnos = {
                     this.pagosData = await GristData.getTable('Pagos');
                     const pagoActualizado = buscarPagoExistente(alumnoId, mesCorrespondiente);
                     if (pagoActualizado) {
-                        avisarPagoExistente(pagoActualizado);
+                        mostrarPagoExistente(pagoActualizado);
                         return;
                     }
 
@@ -1131,6 +1146,7 @@ window.ViewTurnos = {
                     inputAlumnoId.value = "";
                     inputImporte.value = 0;
                     infoPanel.style.display = 'none';
+                    mostrarPagoExistente(null);
                     document.getElementById('pago-fecha').value = new Date().toISOString().split('T')[0];
 
                     // Actualizar datos locales
@@ -1141,7 +1157,7 @@ window.ViewTurnos = {
                     alert("Ocurrió un error al registrar el pago.");
                 } finally {
                     btnGuardar.innerHTML = '<i class="ph ph-check"></i> Confirmar Pago';
-                    btnGuardar.disabled = false;
+                    btnGuardar.disabled = pagoDuplicadoActivo;
                 }
             });
         }
