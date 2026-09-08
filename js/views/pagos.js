@@ -6,8 +6,32 @@ window.ViewPagos = {
     filtroTipoPlanes: [],
     searchTerm: '',
     filtroEstado: 'Todos',
+    accessMode: 'admin',
+    pilatesPlanGroups: ['Pilates Reformer x3', 'Pilates Reformer x2'],
 
-    async render() {
+    setAccessMode(mode) {
+        const previousMode = this.accessMode;
+        this.accessMode = mode === 'pilates' ? 'pilates' : 'admin';
+
+        if (this.accessMode === 'pilates') {
+            this.filtroTipoPlanes = [...this.pilatesPlanGroups];
+        } else if (previousMode === 'pilates') {
+            this.filtroTipoPlanes = [];
+        }
+    },
+
+    isPilatesAccess() {
+        return this.accessMode === 'pilates';
+    },
+
+    getPlanGroupsForCurrentAccess(groups) {
+        if (!this.isPilatesAccess()) return groups;
+        return groups.filter(group => this.pilatesPlanGroups.includes(group));
+    },
+
+    async render(accessMode = null) {
+        if (accessMode) this.setAccessMode(accessMode);
+
         const container = document.getElementById('pagos-container');
 
         if (!this.periodoActual) {
@@ -58,11 +82,15 @@ window.ViewPagos = {
         this.searchTerm = (document.getElementById('filtro-pagos-alumno')?.value || '').toLowerCase();
         this.filtroEstado = document.getElementById('filtro-pagos-estado')?.value || 'Todos';
 
-        const checkboxes = document.querySelectorAll('.filtro-plan-chk');
-        this.filtroTipoPlanes = [];
-        checkboxes.forEach(chk => {
-            if (chk.checked) this.filtroTipoPlanes.push(chk.value);
-        });
+        if (this.isPilatesAccess()) {
+            this.filtroTipoPlanes = [...this.pilatesPlanGroups];
+        } else {
+            const checkboxes = document.querySelectorAll('.filtro-plan-chk');
+            this.filtroTipoPlanes = [];
+            checkboxes.forEach(chk => {
+                if (chk.checked) this.filtroTipoPlanes.push(chk.value);
+            });
+        }
         this.renderDashboard();
     },
 
@@ -90,6 +118,7 @@ window.ViewPagos = {
     renderDashboard() {
         const container = document.getElementById('pagos-container');
         if (!this.alumnosData) return;
+        if (this.isPilatesAccess()) this.filtroTipoPlanes = [...this.pilatesPlanGroups];
 
         // Guardar foco y posición del cursor
         const activeElementId = document.activeElement ? document.activeElement.id : null;
@@ -229,14 +258,15 @@ window.ViewPagos = {
             if (p.combo) groupSet.add('Combo');
             else if (p.nombre) groupSet.add(p.nombre);
         });
-        const groupsArray = Array.from(groupSet);
+        const groupsArray = this.getPlanGroupsForCurrentAccess(Array.from(groupSet));
         groupsArray.sort();
         let planCheckboxesHtml = '';
         groupsArray.forEach(group => {
             const checked = this.filtroTipoPlanes.includes(group) ? 'checked' : '';
+            const disabled = this.isPilatesAccess() ? 'disabled' : '';
             planCheckboxesHtml += `
-                <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:pointer;">
-                    <input type="checkbox" class="filtro-plan-chk" value="${group}" ${checked} onchange="window.ViewPagos.aplicarFiltros()">
+                <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:var(--text-muted); cursor:${this.isPilatesAccess() ? 'default' : 'pointer'};">
+                    <input type="checkbox" class="filtro-plan-chk" value="${group}" ${checked} ${disabled} onchange="window.ViewPagos.aplicarFiltros()">
                     ${group}
                 </label>
             `;

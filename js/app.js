@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const App = {
     currentView: 'turnos',
+    currentAccessMode: 'admin',
 
     async init() {
         // Esperar a que Grist esté genuinamente listo
@@ -193,7 +194,7 @@ const App = {
                 if (window.ViewPlanes) window.ViewPlanes.render();
                 break;
             case 'pagos':
-                if (window.ViewPagos) window.ViewPagos.render();
+                if (window.ViewPagos) window.ViewPagos.render(this.currentAccessMode);
                 break;
             case 'gastos':
                 if (window.ViewGastos) window.ViewGastos.render();
@@ -206,6 +207,15 @@ const App = {
         const bodyHtml = `
             <div style="text-align:center; padding: 10px 0;">
                 <p style="margin-bottom: 20px; font-size: 14px; color: var(--text-muted);">Esta vista contiene información financiera sensible. Ingrese la contraseña de administrador para continuar.</p>
+                ${targetView === 'pagos' ? `
+                    <div style="text-align:left; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 15px;">
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:700; margin-bottom:4px;">
+                            <i class="ph ph-person-simple-run" style="color: var(--primary);"></i>
+                            Caja Pilates
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">Acceso limitado a Pilates Reformer x3 y Pilates Reformer x2.</div>
+                    </div>
+                ` : ''}
                 <div class="form-group">
                     <input type="password" id="admin-password" class="form-control" placeholder="••••••••" style="text-align:center; font-size: 24px; letter-spacing: 8px; background: rgba(0,0,0,0.3);">
                 </div>
@@ -226,6 +236,15 @@ const App = {
 
         const validate = () => {
             if (input.value === 'giasiner2026') {
+                this.currentAccessMode = 'admin';
+                document.getElementById('user-role').textContent = 'Admin';
+                if (window.ViewPagos) window.ViewPagos.setAccessMode('admin');
+                window.Modal.close();
+                this.loadView(targetView, true);
+            } else if (targetView === 'pagos' && input.value === 'sinergiapilates') {
+                this.currentAccessMode = 'pilates';
+                document.getElementById('user-role').textContent = 'Caja Pilates';
+                if (window.ViewPagos) window.ViewPagos.setAccessMode('pilates');
                 window.Modal.close();
                 this.loadView(targetView, true);
             } else {
